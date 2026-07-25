@@ -1,0 +1,53 @@
+[search]
+placeholder = "Find an agent..."
+
+[source]
+cmd = """printf '%s\n' '[{"id":"agent-1","agent":"OpenCode","workspace":"Vellum","state":"in_progress","state_color":"yellow","task":"Implementing the palette","pr":"PR #42","pr_state":"draft"},{"id":"agent-2","agent":"Claude","workspace":"Dotfiles","state":"idle","state_color":"green","task":"Waiting for work","pr":"","pr_state":""}]'"""
+refresh_ms = 1000
+
+[keybindings]
+down = "down"
+up = "up"
+accept = "enter"
+cancel = "esc"
+
+[item]
+value = "$id"
+template = [
+  [
+    { token = "$agent", bold = true },
+    "  ",
+    { token = "$workspace", bold = true },
+    { token = "$state_icon", searchable = false, align = "right" },
+    { token = "  ", searchable = false, align = "right" },
+    { token = "$state", fg = "$state_color", searchable = false, align = "right" },
+  ],
+  [
+    { token = "$task", fg = "#c0caf5" },
+    { token = "$pr", fg = "#bb9af7", align = "right" },
+    { token = "  ", searchable = false, align = "right" },
+    { token = "$pr_state", fg = "#bb9af7", align = "right" },
+  ],
+]
+
+[[item.tokens]]
+name = "state_icon"
+source = "state"
+when = ["in_progress"]
+fg = "yellow"
+animation_fps = 3
+animation_frames = ["◐", "◓", "◑", "◒"]
+
+[[item.tokens]]
+name = "state_icon"
+source = "state"
+when = ["idle"]
+text = "●"
+fg = "green"
+
+[theme]
+foreground = "#c0caf5"
+background = "#1a1b26"
+selection_foreground = "#1a1b26"
+selection_background = "#7aa2f7"
+border = "#565f89"
