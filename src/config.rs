@@ -72,6 +72,8 @@ impl Keybindings {
 #[serde(deny_unknown_fields)]
 pub struct ItemConfig {
     #[serde(default)]
+    pub border: bool,
+    #[serde(default)]
     pub tokens: Vec<TokenDefinition>,
     pub template: Vec<Vec<SegmentConfig>>,
     pub value: String,

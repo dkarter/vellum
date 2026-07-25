@@ -76,6 +76,7 @@ accept = "enter"
 cancel = "esc"
 
 [item]
+border = false
 value = "$agent_id"
 template = [
   [
@@ -117,7 +118,8 @@ Template strings beginning with `$` read source fields. Dot paths such as
 `$pull_request.state` access nested objects. Other strings are literals.
 Segments aligned `right` share the remaining row space. All segments are fuzzy
 searchable by default; set `searchable = false` for decorative or volatile
-content.
+content. Item borders are disabled by default to fit cleanly inside multiplexer
+popups and panes; set `item.border = true` when Vellum provides the outer chrome.
 
 Token definitions derive a display token from another source field. Definitions
 are checked in order, and `when` matches one or more exact source values. A token

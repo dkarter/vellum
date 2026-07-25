@@ -57,7 +57,8 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
         }
     }
 
-    let inner_width = list_area.width.saturating_sub(4) as usize;
+    let horizontal_chrome = if config.item.border { 4 } else { 2 };
+    let inner_width = list_area.width.saturating_sub(horizontal_chrome) as usize;
     let list_items: Vec<_> = app
         .visible
         .iter()
@@ -70,12 +71,15 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
             ListItem::new(lines)
         })
         .collect();
+    let list_block = Block::new()
+        .borders(if config.item.border {
+            Borders::LEFT | Borders::RIGHT
+        } else {
+            Borders::NONE
+        })
+        .border_style(Style::new().fg(color(&theme.border)));
     let list = List::new(list_items)
-        .block(
-            Block::new()
-                .borders(Borders::LEFT | Borders::RIGHT)
-                .border_style(Style::new().fg(color(&theme.border))),
-        )
+        .block(list_block)
         .highlight_symbol("› ")
         .highlight_style(
             Style::new()
@@ -200,5 +204,45 @@ mod tests {
         assert!(output.contains("running"));
         assert!(output.contains("Implementing feature"));
         assert!(output.contains("1/1"));
+        assert_ne!(buffer[(0, 3)].symbol(), "│");
+        assert_ne!(buffer[(49, 3)].symbol(), "│");
+    }
+
+    #[test]
+    fn renders_item_border_when_enabled() {
+        let mut config = Config::parse(
+            r#"
+                [source]
+                cmd = "unused"
+
+                [item]
+                border = true
+                template = [["$name"]]
+                value = "$id"
+            "#,
+        )
+        .unwrap();
+        config.search.enabled = false;
+        let source = json!([{ "id": "1", "name": "OpenCode" }]);
+        let mut app = App::new(
+            source
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item.as_object().unwrap().clone())
+                .collect(),
+            config.item.clone(),
+            config.keybindings.clone(),
+            false,
+        );
+        let backend = TestBackend::new(20, 4);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+
+        assert_eq!(terminal.backend().buffer()[(0, 0)].symbol(), "│");
+        assert_eq!(terminal.backend().buffer()[(19, 0)].symbol(), "│");
     }
 }
