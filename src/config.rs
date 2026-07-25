@@ -439,7 +439,6 @@ mod tests {
         ))
         .unwrap_err();
         assert!(animation.to_string().contains("cannot exceed 1000"));
-
     }
 
     #[test]

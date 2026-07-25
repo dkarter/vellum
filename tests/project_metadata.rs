@@ -15,10 +15,9 @@ fn sch_001_bundled_schema_is_valid_json() {
 
 #[test]
 fn sch_002_taplo_rule_references_bundled_schema() {
-    let config: toml::Value = toml::from_str(
-        &fs::read_to_string("taplo.toml").expect("Taplo config should be readable"),
-    )
-    .expect("Taplo config should be valid TOML");
+    let config: toml::Value =
+        toml::from_str(&fs::read_to_string("taplo.toml").expect("Taplo config should be readable"))
+            .expect("Taplo config should be valid TOML");
 
     assert_eq!(
         config["rule"][0]["schema"]["path"].as_str(),

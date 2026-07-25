@@ -17,13 +17,25 @@ fn meta_001_repository_spec_links_are_complete() {
                 .rsplit_once("{#")
                 .and_then(|(_, suffix)| suffix.strip_suffix('}'))
             else {
-                errors.push(format!("{}:{} scenario has no ID", path.display(), line_number + 1));
+                errors.push(format!(
+                    "{}:{} scenario has no ID",
+                    path.display(),
+                    line_number + 1
+                ));
                 continue;
             };
             if !valid_id(id) {
-                errors.push(format!("{}:{} invalid scenario ID {id}", path.display(), line_number + 1));
+                errors.push(format!(
+                    "{}:{} invalid scenario ID {id}",
+                    path.display(),
+                    line_number + 1
+                ));
             } else if let Some(previous) = scenarios.insert(id.to_owned(), path.clone()) {
-                errors.push(format!("duplicate scenario {id} in {} and {}", previous.display(), path.display()));
+                errors.push(format!(
+                    "duplicate scenario {id} in {} and {}",
+                    previous.display(),
+                    path.display()
+                ));
             }
         }
     }
@@ -39,7 +51,9 @@ fn meta_001_repository_spec_links_are_complete() {
                     test_attribute = true;
                     continue;
                 }
-                if !test_attribute || (!trimmed.starts_with("fn ") && !trimmed.starts_with("async fn ")) {
+                if !test_attribute
+                    || (!trimmed.starts_with("fn ") && !trimmed.starts_with("async fn "))
+                {
                     continue;
                 }
                 test_attribute = false;
@@ -68,12 +82,18 @@ fn meta_001_repository_spec_links_are_complete() {
         errors.push(format!("test references unknown scenario {id}"));
     }
 
-    assert!(errors.is_empty(), "spec/test link errors:\n{}", errors.join("\n"));
+    assert!(
+        errors.is_empty(),
+        "spec/test link errors:\n{}",
+        errors.join("\n")
+    );
 }
 
 fn files_under(root: &Path, extension: &str) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    for entry in fs::read_dir(root).unwrap_or_else(|error| panic!("failed to read {}: {error}", root.display())) {
+    for entry in fs::read_dir(root)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", root.display()))
+    {
         let path = entry.unwrap().path();
         if path.is_dir() {
             files.extend(files_under(&path, extension));
@@ -98,7 +118,9 @@ fn valid_id(id: &str) -> bool {
         return false;
     };
     prefix.len() >= 2
-        && prefix.chars().all(|character| character.is_ascii_uppercase() || character.is_ascii_digit())
+        && prefix
+            .chars()
+            .all(|character| character.is_ascii_uppercase() || character.is_ascii_digit())
         && number.len() == 3
         && number.chars().all(|character| character.is_ascii_digit())
 }
@@ -111,7 +133,9 @@ fn ids_from_test_name(name: &str) -> Vec<String> {
             let prefix = parts[0];
             let number = parts[1];
             (prefix.len() >= 2
-                && prefix.chars().all(|character| character.is_ascii_alphanumeric())
+                && prefix
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric())
                 && number.len() == 3
                 && number.chars().all(|character| character.is_ascii_digit()))
             .then(|| format!("{}-{number}", prefix.to_ascii_uppercase()))
