@@ -236,7 +236,7 @@ mod tests {
     }
 
     #[test]
-    fn expands_multiline_template_styles_and_value() {
+    fn itm_001_expands_multiline_template_styles_and_value() {
         let rendered = render_item(&source_item(), &item_config(), 500);
 
         assert_eq!(rendered.rows[0].segments[0].text, "OpenCode");
@@ -252,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn fuzzy_matching_scores_and_filters_items() {
+    fn sea_001_fuzzy_matching_scores_and_filters_items() {
         let mut second = source_item();
         second.insert("name".into(), json!("zzzz"));
         let rendered = render_items(&[second, source_item()], &item_config(), 0);
@@ -262,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    fn resolves_colors_from_source_fields() {
+    fn itm_002_resolves_colors_from_source_fields() {
         let mut config = item_config();
         config.tokens[0].fg = Some("$state_color".into());
 

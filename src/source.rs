@@ -53,7 +53,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_json_array() {
+    fn src_001_parses_json_array() {
         let items = parse(r#"[{"id":1,"name":"one"},{"id":2,"name":"two"}]"#).unwrap();
 
         assert_eq!(items.len(), 2);
@@ -61,19 +61,33 @@ mod tests {
     }
 
     #[test]
-    fn parses_ndjson_and_ignores_blank_lines() {
+    fn src_002_parses_ndjson_and_ignores_blank_lines() {
         let items = parse("{\"id\":1}\n\n{\"id\":2}\n").unwrap();
 
         assert_eq!(items.len(), 2);
     }
 
     #[test]
-    fn rejects_non_object_items() {
+    fn src_003_rejects_non_object_items() {
         assert!(
             parse("[1]")
                 .unwrap_err()
                 .to_string()
                 .contains("JSON object")
         );
+    }
+
+    #[test]
+    fn src_004_runs_successful_source_command() {
+        let items = run("printf '%s' '[{\"id\":\"one\"}]'").unwrap();
+
+        assert_eq!(items[0]["id"], "one");
+    }
+
+    #[test]
+    fn src_005_reports_failed_source_command() {
+        let error = run("printf 'broken source' >&2; exit 7").unwrap_err();
+
+        assert!(error.to_string().contains("broken source"));
     }
 }

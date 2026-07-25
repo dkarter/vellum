@@ -129,12 +129,15 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App, config: &Config) 
 }
 
 fn set_cursor_style(mode: vellum::config::InputMode) -> Result<()> {
-    let style = match mode {
+    execute!(io::stdout(), cursor_style(mode))?;
+    Ok(())
+}
+
+fn cursor_style(mode: vellum::config::InputMode) -> SetCursorStyle {
+    match mode {
         vellum::config::InputMode::Insert => SetCursorStyle::SteadyBar,
         vellum::config::InputMode::Normal => SetCursorStyle::SteadyBlock,
-    };
-    execute!(io::stdout(), style)?;
-    Ok(())
+    }
 }
 
 fn next_timeout(
@@ -227,25 +230,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn explicit_config_path_wins() {
+    fn cli_001_explicit_config_path_wins() {
         let command = cli(["custom.toml".into()].into_iter()).unwrap();
         assert_eq!(command, Cli::Run("custom.toml".into()));
     }
 
     #[test]
-    fn help_does_not_load_a_config() {
+    fn cli_002_help_does_not_load_a_config() {
         assert_eq!(cli(["--help".into()].into_iter()).unwrap(), Cli::Help);
         assert_eq!(cli(["--version".into()].into_iter()).unwrap(), Cli::Version);
     }
 
     #[test]
-    fn rejects_extra_arguments() {
+    fn cli_003_rejects_extra_arguments() {
         let error = cli(["one".into(), "two".into()].into_iter()).unwrap_err();
         assert!(error.to_string().contains("at most one"));
     }
 
     #[test]
-    fn resolves_names_under_palette_directory_and_preserves_paths() {
+    fn cli_004_resolves_names_under_palette_directory_and_preserves_paths() {
         let root = PathBuf::from("/tmp/vellum");
         assert_eq!(
             palette_path("agents", Some(&root)).unwrap(),
@@ -258,7 +261,19 @@ mod tests {
     }
 
     #[test]
-    fn defaults_to_the_default_named_palette() {
+    fn cli_005_defaults_to_the_default_named_palette() {
         assert_eq!(cli(std::iter::empty()).unwrap(), Cli::Run("default".into()));
+    }
+
+    #[test]
+    fn ui_006_uses_mode_specific_cursor_shapes() {
+        assert_eq!(
+            cursor_style(vellum::config::InputMode::Insert),
+            SetCursorStyle::SteadyBar
+        );
+        assert_eq!(
+            cursor_style(vellum::config::InputMode::Normal),
+            SetCursorStyle::SteadyBlock
+        );
     }
 }

@@ -184,7 +184,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn renders_search_multiline_items_and_footer() {
+    fn ui_001_renders_search_multiline_items_and_footer() {
         let config = Config::parse(
             r##"
                 [source]
@@ -232,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    fn renders_item_border_when_enabled() {
+    fn ui_002_renders_item_border_when_enabled() {
         let mut config = Config::parse(
             r#"
                 [source]
@@ -271,7 +271,7 @@ mod tests {
     }
 
     #[test]
-    fn applies_configurable_item_padding() {
+    fn ui_003_applies_configurable_item_padding() {
         let mut config = Config::parse(
             r#"
                 [source]
@@ -310,7 +310,7 @@ mod tests {
     }
 
     #[test]
-    fn large_padding_saturates_on_narrow_terminals() {
+    fn ui_004_large_padding_saturates_on_narrow_terminals() {
         let mut config = Config::parse(
             r#"
                 [source]
@@ -346,7 +346,7 @@ mod tests {
     }
 
     #[test]
-    fn search_view_keeps_long_query_cursor_inside_input() {
+    fn ui_005_search_view_keeps_long_query_cursor_inside_input() {
         let (view, offset) = search_view("abcdefgh", 8, 4);
         assert_eq!(view, "fgh");
         assert_eq!(offset, 3);

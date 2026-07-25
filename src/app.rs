@@ -338,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn filters_navigates_and_accepts() {
+    fn sea_002_filters_navigates_and_accepts() {
         let mut app = app();
 
         app.handle_key(KeyEvent::from(KeyCode::Char('b')));
@@ -348,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    fn keeps_selected_value_across_refresh() {
+    fn ref_001_keeps_selected_value_across_refresh() {
         let mut app = app();
         app.handle_key(KeyEvent::from(KeyCode::Down));
         let replacement = json!([
@@ -370,7 +370,7 @@ mod tests {
     }
 
     #[test]
-    fn cancel_binding_exits_without_value() {
+    fn inp_001_cancel_binding_exits_without_value() {
         let mut app = app();
         app.handle_key(KeyEvent::from(KeyCode::Esc));
         assert_eq!(app.input_mode, InputMode::Normal);
@@ -380,7 +380,7 @@ mod tests {
     }
 
     #[test]
-    fn supports_readline_editing_and_list_bindings() {
+    fn inp_002_nav_001_supports_readline_editing_and_list_bindings() {
         let mut app = app();
         for character in "one two".chars() {
             app.handle_key(KeyEvent::from(KeyCode::Char(character)));
@@ -403,7 +403,7 @@ mod tests {
     }
 
     #[test]
-    fn supports_basic_vim_input_and_ctrl_c_always_cancels() {
+    fn inp_003_can_001_supports_basic_vim_input_and_ctrl_c_always_cancels() {
         let mut app = app();
         for character in "abc".chars() {
             app.handle_key(KeyEvent::from(KeyCode::Char(character)));
@@ -421,7 +421,7 @@ mod tests {
     }
 
     #[test]
-    fn escape_cancels_immediately_when_vim_mode_is_disabled() {
+    fn inp_004_escape_cancels_immediately_when_vim_mode_is_disabled() {
         let mut app = app();
         app.input_config.vim = false;
         app.input_mode = InputMode::Insert;
@@ -432,7 +432,7 @@ mod tests {
     }
 
     #[test]
-    fn vim_end_and_delete_keep_cursor_on_the_last_grapheme() {
+    fn inp_005_vim_end_and_delete_keep_cursor_on_the_last_grapheme() {
         let mut app = app();
         for character in "abc".chars() {
             app.handle_key(KeyEvent::from(KeyCode::Char(character)));
@@ -447,7 +447,7 @@ mod tests {
     }
 
     #[test]
-    fn editing_treats_combining_and_joined_emoji_as_graphemes() {
+    fn inp_006_editing_treats_combining_and_joined_emoji_as_graphemes() {
         for value in ["e\u{301}", "👨‍👩‍👧‍👦"] {
             let mut app = app();
             for character in value.chars() {

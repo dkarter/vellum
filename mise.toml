@@ -2,4 +2,38 @@
 vellum = "cargo run --release --"
 
 [tools]
+"npm:@fission-ai/openspec" = { version = "latest", aube_args = "--deny-build=@fission-ai/openspec" }
+aube = "latest"
+node = "24"
+ripgrep = "latest"
 rust = "1.97.1"
+
+[settings]
+npm.package_manager = "aube"
+
+[env]
+OPENSPEC_TELEMETRY = 0
+DO_NOT_TRACK = 1
+
+[tasks.test]
+description = "Run the full Rust test suite"
+run = "cargo test"
+
+[tasks."openspec:check"]
+description = "Validate OpenSpec artifacts and spec/test links"
+run = """
+openspec validate --all --strict --no-interactive
+cargo test --test spec_links
+"""
+
+[tasks."spec:list"]
+description = "List OpenSpec capabilities"
+run = "openspec list --specs"
+
+[tasks."test:spec"]
+description = "Run tests linked to an OpenSpec scenario or capability"
+usage = '''
+arg "<target>" help="Scenario ID, capability name, or spec.md path"
+complete "target" run="{ rg --no-filename --only-matching '#[A-Z][A-Z0-9]+-[0-9]{3}' openspec/specs | tr -d '#'; find openspec/specs -mindepth 1 -maxdepth 1 -type d -exec basename {} \\; } | sort -u"
+'''
+run = "bash scripts/test-spec.sh ${usage_target?}"

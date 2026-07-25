@@ -378,7 +378,7 @@ mod tests {
     "#;
 
     #[test]
-    fn parses_minimal_config_with_defaults() {
+    fn cfg_001_parses_minimal_config_with_defaults() {
         let config = Config::parse(MINIMAL).unwrap();
 
         assert!(config.search.enabled);
@@ -391,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_token_rules_and_styled_segments() {
+    fn cfg_002_parses_token_rules_and_styled_segments() {
         let config = Config::parse(&format!(
             "{MINIMAL}\n{}",
             r#"
@@ -410,7 +410,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_animation_without_frames() {
+    fn cfg_003_rejects_animation_without_frames() {
         let error = Config::parse(&format!(
             "{MINIMAL}\n{}",
             r#"
@@ -426,7 +426,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unsafe_animation_rate_and_invalid_binding() {
+    fn cfg_004_rejects_unsafe_animation_rate() {
         let animation = Config::parse(&format!(
             "{MINIMAL}\n{}",
             r#"
@@ -440,13 +440,17 @@ mod tests {
         .unwrap_err();
         assert!(animation.to_string().contains("cannot exceed 1000"));
 
+    }
+
+    #[test]
+    fn cfg_005_rejects_invalid_binding() {
         let binding =
             Config::parse(&format!("{MINIMAL}\n[keybindings]\ncancel = 'quit'")).unwrap_err();
         assert!(format!("{binding:#}").contains("unsupported keybinding"));
     }
 
     #[test]
-    fn merges_global_defaults_under_palette_overrides() {
+    fn cfg_006_merges_global_defaults_under_palette_overrides() {
         let global = r#"
             [search]
             placeholder = "Global"
@@ -471,7 +475,7 @@ mod tests {
     }
 
     #[test]
-    fn allows_individual_bindings_and_all_bindings_to_be_disabled() {
+    fn cfg_007_allows_individual_bindings_and_all_bindings_to_be_disabled() {
         let config = Config::parse(&format!(
             "{MINIMAL}\n[keybindings]\nenabled = false\ndown = false"
         ))
