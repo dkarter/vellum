@@ -1,22 +1,41 @@
-use std::process::Command;
+use std::process::{Command, Output};
 
 use anyhow::{Context, Result, bail};
 use serde_json::{Map, Value};
 
+use crate::config::SourceConfig;
+
 pub type SourceItem = Map<String, Value>;
 
-pub fn run(command: &str) -> Result<Vec<SourceItem>> {
-    let output = Command::new("sh")
-        .args(["-c", command])
-        .output()
-        .with_context(|| format!("failed to run source command: {command}"))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        bail!("source command exited with {}: {stderr}", output.status);
+pub fn run(source: &SourceConfig) -> Result<Vec<SourceItem>> {
+    if let Some(builtin) = source.builtin {
+        return builtin.run();
     }
+    let command = source
+        .cmd
+        .as_deref()
+        .context("source has neither cmd nor builtin")?;
+    let stdout = command_output(
+        Command::new("sh").args(["-c", command]),
+        &format!("source command: {command}"),
+    )?;
+    parse(&stdout)
+}
 
-    parse(&String::from_utf8(output.stdout).context("source output is not UTF-8")?)
+pub(crate) fn command_output(command: &mut Command, label: &str) -> Result<String> {
+    let output = command
+        .output()
+        .with_context(|| format!("failed to run {label}"))?;
+    ensure_success(label, &output)?;
+    String::from_utf8(output.stdout).with_context(|| format!("{label} output is not UTF-8"))
+}
+
+pub(crate) fn ensure_success(label: &str, output: &Output) -> Result<()> {
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    bail!("{label} exited with {}: {stderr}", output.status)
 }
 
 pub fn parse(input: &str) -> Result<Vec<SourceItem>> {

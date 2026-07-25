@@ -15,7 +15,7 @@ use crossterm::{
 use vellum::{
     app::{App, Outcome},
     config::Config,
-    source, ui,
+    official, source, ui,
 };
 
 const REFRESH_POLL_RATE: Duration = Duration::from_millis(50);
@@ -23,6 +23,13 @@ const REFRESH_POLL_RATE: Duration = Duration::from_millis(50);
 fn main() -> Result<()> {
     let palette = match cli(env::args().skip(1))? {
         Cli::Run(palette) => palette,
+        Cli::PalettesSync { overwrite } => {
+            let root = config_root().context(
+                "HOME and XDG_CONFIG_HOME are both unset; cannot locate the palette directory",
+            )?;
+            print_sync_report(&official::sync(&root, overwrite)?);
+            return Ok(());
+        }
         Cli::Help => {
             print_help();
             return Ok(());
@@ -48,7 +55,7 @@ fn main() -> Result<()> {
         None => None,
     };
     let config = Config::parse_layered(global.as_deref(), &palette)?;
-    let source_items = source::run(&config.source.cmd)?;
+    let source_items = source::run(&config.source)?;
     let mut app = App::new(
         source_items,
         config.item.clone(),
@@ -122,7 +129,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App, config: &Config) 
             && refresh_result.is_none()
             && last_refresh.elapsed() >= refresh_interval
         {
-            refresh_result = Some(spawn_refresh(config.source.cmd.clone()));
+            refresh_result = Some(spawn_refresh(config.source.clone()));
             last_refresh = Instant::now();
         }
     }
@@ -160,10 +167,12 @@ fn next_timeout(
     timeout
 }
 
-fn spawn_refresh(command: String) -> Receiver<Result<Vec<source::SourceItem>>> {
+fn spawn_refresh(
+    source: vellum::config::SourceConfig,
+) -> Receiver<Result<Vec<source::SourceItem>>> {
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let _ = sender.send(source::run(&command));
+        let _ = sender.send(source::run(&source));
     });
     receiver
 }
@@ -181,20 +190,26 @@ fn receive_refresh(
 #[derive(Debug, PartialEq, Eq)]
 enum Cli {
     Run(String),
+    PalettesSync { overwrite: bool },
     Help,
     Version,
 }
 
-fn cli(mut args: impl Iterator<Item = String>) -> Result<Cli> {
-    let first = args.next();
-    if args.next().is_some() {
-        bail!("expected at most one configuration path");
-    }
-    match first.as_deref() {
-        Some("-h" | "--help") => Ok(Cli::Help),
-        Some("-V" | "--version") => Ok(Cli::Version),
-        Some(palette) => Ok(Cli::Run(palette.to_owned())),
-        None => Ok(Cli::Run("default".into())),
+fn cli(args: impl Iterator<Item = String>) -> Result<Cli> {
+    let args: Vec<_> = args.collect();
+    match args
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        [] => Ok(Cli::Run("default".into())),
+        ["-h" | "--help"] => Ok(Cli::Help),
+        ["-V" | "--version"] => Ok(Cli::Version),
+        ["palettes", "sync"] => Ok(Cli::PalettesSync { overwrite: false }),
+        ["palettes", "sync", "--overwrite"] => Ok(Cli::PalettesSync { overwrite: true }),
+        [palette] => Ok(Cli::Run((*palette).to_owned())),
+        _ => bail!("invalid arguments; run 'vellum --help' for usage"),
     }
 }
 
@@ -220,9 +235,21 @@ fn palette_path(palette: &str, config_root: Option<&std::path::Path>) -> Result<
 
 fn print_help() {
     println!(
-        "Vellum {}\n\nUsage: vellum [PALETTE]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nOptions:\n  -h, --help     Print help\n  -V, --version  Print version",
+        "Vellum {}\n\nUsage:\n  vellum [PALETTE]\n  vellum palettes sync [--overwrite]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nCommands:\n  palettes sync  Install bundled palettes without replacing existing files\n\nOptions:\n  --overwrite    Replace existing official palette files during sync\n  -h, --help     Print help\n  -V, --version  Print version",
         env!("CARGO_PKG_VERSION")
     );
+}
+
+fn print_sync_report(report: &official::SyncReport) {
+    for filename in &report.installed {
+        println!("installed {filename}");
+    }
+    for filename in &report.overwritten {
+        println!("overwrote {filename}");
+    }
+    for filename in &report.skipped {
+        println!("skipped {filename} (already exists)");
+    }
 }
 
 #[cfg(test)]
@@ -244,7 +271,7 @@ mod tests {
     #[test]
     fn cli_003_rejects_extra_arguments() {
         let error = cli(["one".into(), "two".into()].into_iter()).unwrap_err();
-        assert!(error.to_string().contains("at most one"));
+        assert!(error.to_string().contains("invalid arguments"));
     }
 
     #[test]
@@ -274,6 +301,18 @@ mod tests {
         assert_eq!(
             cursor_style(vellum::config::InputMode::Normal),
             SetCursorStyle::SteadyBlock
+        );
+    }
+
+    #[test]
+    fn cli_006_parses_palette_sync_commands() {
+        assert_eq!(
+            cli(["palettes".into(), "sync".into()].into_iter()).unwrap(),
+            Cli::PalettesSync { overwrite: false }
+        );
+        assert_eq!(
+            cli(["palettes".into(), "sync".into(), "--overwrite".into()].into_iter()).unwrap(),
+            Cli::PalettesSync { overwrite: true }
         );
     }
 }

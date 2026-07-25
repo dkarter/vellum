@@ -1,0 +1,25 @@
+#:schema ../schemas/vellum.schema.json
+
+[search]
+placeholder = "Find a file..."
+
+[source]
+builtin = "files"
+
+[item]
+value = "$path"
+template = [
+  [
+    { token = "$icon", fg = "$icon_color", searchable = false },
+    "  ",
+    { token = "$name", bold = true },
+  ],
+  [{ token = "$parent", fg = "#565f89" }],
+]
+
+[theme]
+foreground = "#c0caf5"
+background = "#1a1b26"
+selection_foreground = "#c0caf5"
+selection_background = "#283457"
+border = "#565f89"

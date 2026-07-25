@@ -18,7 +18,15 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "cmd": { "type": "string", "minLength": 1 },
+        "cmd": {
+          "description": "Shell command producing a JSON array or NDJSON objects. Mutually exclusive with builtin.",
+          "type": "string",
+          "minLength": 1
+        },
+        "builtin": {
+          "description": "Maintained in-process source adapter. Mutually exclusive with cmd.",
+          "enum": ["herdr-workspaces", "herdr-agents", "files"]
+        },
         "refresh_ms": { "type": "integer", "minimum": 0, "default": 0 }
       }
     },

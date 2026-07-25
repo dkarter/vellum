@@ -2,6 +2,8 @@ use anyhow::{Context, Result, bail};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, Deserializer};
 
+use crate::builtins::BuiltinSource;
+
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -36,7 +38,10 @@ impl Default for SearchConfig {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct SourceConfig {
-    pub cmd: String,
+    #[serde(default)]
+    pub cmd: Option<String>,
+    #[serde(default)]
+    pub builtin: Option<BuiltinSource>,
     #[serde(default)]
     pub refresh_ms: u64,
 }
@@ -304,6 +309,7 @@ impl Config {
             None => toml::Value::Table(Default::default()),
         };
         let palette = toml::from_str(palette).context("invalid Vellum palette")?;
+        clear_overridden_source_variant(&mut value, &palette);
         merge(&mut value, palette);
         let config: Self = value
             .try_into()
@@ -313,8 +319,12 @@ impl Config {
     }
 
     fn validate(&self) -> Result<()> {
-        if self.source.cmd.trim().is_empty() {
-            bail!("source.cmd cannot be empty");
+        match (&self.source.cmd, self.source.builtin) {
+            (Some(cmd), None) if !cmd.trim().is_empty() => {}
+            (None, Some(_)) => {}
+            (Some(_), None) => bail!("source.cmd cannot be empty"),
+            (Some(_), Some(_)) => bail!("source must set only one of cmd or builtin"),
+            (None, None) => bail!("source must set one of cmd or builtin"),
         }
         if self.item.template.is_empty() || self.item.template.iter().any(Vec::is_empty) {
             bail!("item.template must contain non-empty rows");
@@ -337,6 +347,21 @@ impl Config {
             }
         }
         Ok(())
+    }
+}
+
+fn clear_overridden_source_variant(base: &mut toml::Value, overlay: &toml::Value) {
+    let Some(source) = overlay.get("source").and_then(toml::Value::as_table) else {
+        return;
+    };
+    let Some(base_source) = base.get_mut("source").and_then(toml::Value::as_table_mut) else {
+        return;
+    };
+    if source.contains_key("builtin") {
+        base_source.remove("cmd");
+    }
+    if source.contains_key("cmd") {
+        base_source.remove("builtin");
     }
 }
 
@@ -388,6 +413,24 @@ mod tests {
         assert_eq!(config.input.start_mode, InputMode::Insert);
         assert_eq!(config.item.padding, 1);
         assert_eq!(config.theme.selection_background, "cyan");
+    }
+
+    #[test]
+    fn cfg_008_parses_builtin_source_and_rejects_ambiguous_source() {
+        let builtin = MINIMAL.replace("cmd = \"herdr agents --json\"", "builtin = \"files\"");
+        let config = Config::parse(&builtin).unwrap();
+        assert_eq!(config.source.builtin, Some(BuiltinSource::Files));
+
+        let ambiguous = MINIMAL.replace(
+            "cmd = \"herdr agents --json\"",
+            "cmd = \"herdr agent list\"\nbuiltin = \"herdr-agents\"",
+        );
+        assert!(
+            Config::parse(&ambiguous)
+                .unwrap_err()
+                .to_string()
+                .contains("only one")
+        );
     }
 
     #[test]
@@ -471,6 +514,17 @@ mod tests {
         assert_eq!(config.input.start_mode, InputMode::Normal);
         assert_eq!(config.keybindings.down.label(), "ctrl-j");
         assert_eq!(config.item.padding, 3);
+    }
+
+    #[test]
+    fn cfg_009_palette_source_kind_replaces_global_source_kind() {
+        let global = "[source]\ncmd = 'global command'";
+        let palette = MINIMAL.replace("cmd = \"herdr agents --json\"", "builtin = \"files\"");
+
+        let config = Config::parse_layered(Some(global), &palette).unwrap();
+
+        assert_eq!(config.source.cmd, None);
+        assert_eq!(config.source.builtin, Some(BuiltinSource::Files));
     }
 
     #[test]

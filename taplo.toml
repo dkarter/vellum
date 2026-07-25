@@ -1,5 +1,5 @@
 [[rule]]
-include = ["examples/*.toml"]
+include = ["examples/*.toml", "palettes/*.toml"]
 
 [rule.schema]
 path = "schemas/vellum.schema.json"
