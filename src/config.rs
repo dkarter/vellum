@@ -58,6 +58,16 @@ impl Default for Keybindings {
     }
 }
 
+impl Keybindings {
+    pub fn normalized(mut self) -> Self {
+        self.down.make_ascii_lowercase();
+        self.up.make_ascii_lowercase();
+        self.accept.make_ascii_lowercase();
+        self.cancel.make_ascii_lowercase();
+        self
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ItemConfig {
@@ -158,6 +168,14 @@ impl Config {
         if self.item.value.trim().is_empty() {
             bail!("item.value cannot be empty");
         }
+        for binding in [
+            &self.keybindings.down,
+            &self.keybindings.up,
+            &self.keybindings.accept,
+            &self.keybindings.cancel,
+        ] {
+            validate_binding(binding)?;
+        }
         for token in &self.item.tokens {
             if token.name.trim().is_empty() || token.source.trim().is_empty() {
                 bail!("item token name and source cannot be empty");
@@ -165,11 +183,28 @@ impl Config {
             if token.animation_fps == Some(0) {
                 bail!("animation_fps must be greater than zero");
             }
+            if token.animation_fps.is_some_and(|fps| fps > 1_000) {
+                bail!("animation_fps cannot exceed 1000");
+            }
             if token.animation_fps.is_some() && token.animation_frames.is_empty() {
                 bail!("animated token '{}' has no animation_frames", token.name);
             }
         }
         Ok(())
+    }
+}
+
+fn validate_binding(binding: &str) -> Result<()> {
+    let normalized = binding.to_ascii_lowercase();
+    let name = normalized.strip_prefix("ctrl-").unwrap_or(&normalized);
+    let named = matches!(
+        name,
+        "up" | "down" | "left" | "right" | "enter" | "esc" | "escape" | "backspace"
+    );
+    if named || name.chars().count() == 1 {
+        Ok(())
+    } else {
+        bail!("unsupported keybinding '{binding}'")
     }
 }
 
@@ -232,5 +267,25 @@ mod tests {
         .unwrap_err();
 
         assert!(error.to_string().contains("has no animation_frames"));
+    }
+
+    #[test]
+    fn rejects_unsafe_animation_rate_and_invalid_binding() {
+        let animation = Config::parse(&format!(
+            "{MINIMAL}\n{}",
+            r#"
+            [[item.tokens]]
+            name = "icon"
+            source = "state"
+            animation_fps = 1001
+            animation_frames = ["."]
+            "#
+        ))
+        .unwrap_err();
+        assert!(animation.to_string().contains("cannot exceed 1000"));
+
+        let binding =
+            Config::parse(&format!("{MINIMAL}\n[keybindings]\ncancel = 'quit'")).unwrap_err();
+        assert!(binding.to_string().contains("unsupported keybinding"));
     }
 }

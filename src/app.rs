@@ -37,7 +37,7 @@ impl App {
         let visible = matching_indices(&items, "");
         Self {
             item_config,
-            keybindings,
+            keybindings: keybindings.normalized(),
             search_enabled,
             source_items,
             items,
@@ -82,7 +82,19 @@ impl App {
         self.clamp_selection();
     }
 
-    pub fn replace_source(&mut self, source_items: Vec<SourceItem>, elapsed_ms: u64) {
+    pub fn animation_interval(&self) -> Option<std::time::Duration> {
+        self.item_config
+            .tokens
+            .iter()
+            .filter_map(|token| token.animation_fps)
+            .max()
+            .map(|fps| std::time::Duration::from_millis(1_000 / u64::from(fps)))
+    }
+
+    pub fn replace_source(&mut self, source_items: Vec<SourceItem>, elapsed_ms: u64) -> bool {
+        if self.source_items == source_items {
+            return false;
+        }
         let selected_value = self.selected_item().map(|item| item.value.clone());
         self.source_items = source_items;
         self.items = render_items(&self.source_items, &self.item_config, elapsed_ms);
@@ -95,6 +107,7 @@ impl App {
             })
             .unwrap_or(0);
         self.clamp_selection();
+        true
     }
 
     pub fn selected_item(&self) -> Option<&RenderedItem> {
@@ -124,10 +137,9 @@ impl App {
 }
 
 fn binding_matches(key: KeyEvent, binding: &str) -> bool {
-    let normalized = binding.to_ascii_lowercase();
-    let (modifiers, name) = normalized
+    let (modifiers, name) = binding
         .strip_prefix("ctrl-")
-        .map_or((KeyModifiers::NONE, normalized.as_str()), |name| {
+        .map_or((KeyModifiers::NONE, binding), |name| {
             (KeyModifiers::CONTROL, name)
         });
     if key.modifiers != modifiers {

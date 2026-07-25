@@ -87,9 +87,13 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
     frame.render_stateful_widget(list, list_area, &mut state);
 
     let footer = format!(
-        "{}/{}  ↑↓ navigate  enter select  esc cancel",
+        "{}/{}  {}/{} navigate  {} select  {} cancel",
         app.visible.len(),
-        app.items.len()
+        app.items.len(),
+        config.keybindings.up,
+        config.keybindings.down,
+        config.keybindings.accept,
+        config.keybindings.cancel,
     );
     frame.render_widget(
         Paragraph::new(footer).style(Style::new().fg(color(&theme.border))),
@@ -105,14 +109,8 @@ fn render_row<'a>(row: &'a RenderedRow, width: usize, theme: &Theme) -> Line<'a>
     let (left, right) = split.map_or((&row.segments[..], &[][..]), |index| {
         row.segments.split_at(index)
     });
-    let left_width: usize = left
-        .iter()
-        .map(|segment| segment.text.chars().count())
-        .sum();
-    let right_width: usize = right
-        .iter()
-        .map(|segment| segment.text.chars().count())
-        .sum();
+    let left_width: usize = left.iter().map(display_width).sum();
+    let right_width: usize = right.iter().map(display_width).sum();
     let mut spans: Vec<_> = left.iter().map(|segment| span(segment, theme)).collect();
     if !right.is_empty() {
         spans.push(Span::raw(
@@ -121,6 +119,10 @@ fn render_row<'a>(row: &'a RenderedRow, width: usize, theme: &Theme) -> Line<'a>
         spans.extend(right.iter().map(|segment| span(segment, theme)));
     }
     Line::from(spans)
+}
+
+fn display_width(segment: &RenderedSegment) -> usize {
+    Line::from(segment.text.as_str()).width()
 }
 
 fn span<'a>(segment: &'a RenderedSegment, theme: &Theme) -> Span<'a> {

@@ -128,6 +128,8 @@ fn render_segment(
         |definition| definition_text(item, definition, elapsed_ms),
     );
     let (fg, bg, bold) = merged_style(definition, style);
+    let fg = fg.map(|value| resolve(item, &value));
+    let bg = bg.map(|value| resolve(item, &value));
 
     (
         RenderedSegment {
@@ -225,6 +227,7 @@ mod tests {
             "name": "OpenCode",
             "workspace": "Dotfiles",
             "state": "running",
+            "state_color": "green",
             "meta": { "pr": "PR #123" }
         })
         .as_object()
@@ -256,5 +259,15 @@ mod tests {
 
         assert_eq!(matching_indices(&rendered, "zzzz"), [0]);
         assert_eq!(matching_indices(&rendered, ""), [0, 1]);
+    }
+
+    #[test]
+    fn resolves_colors_from_source_fields() {
+        let mut config = item_config();
+        config.tokens[0].fg = Some("$state_color".into());
+
+        let rendered = render_item(&source_item(), &config, 0);
+
+        assert_eq!(rendered.rows[0].segments[1].fg.as_deref(), Some("green"));
     }
 }
