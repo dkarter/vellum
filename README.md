@@ -36,16 +36,49 @@ by name. With no argument, Vellum opens the palette named `default`.
 vellum agents # loads $XDG_CONFIG_HOME/vellum/palettes/agents.toml
 ```
 
+## Official Palettes
+
+Install Vellum's bundled palettes into the user configuration directory:
+
+```sh
+vellum palettes sync
+```
+
+The command uses `$XDG_CONFIG_HOME/vellum/palettes`, or
+`$HOME/.config/vellum/palettes` when `XDG_CONFIG_HOME` is unset. Existing files
+are reported and left untouched so local edits are safe. To deliberately update
+all official files to the bundled versions, use:
+
+```sh
+vellum palettes sync --overwrite
+```
+
+The library includes these palettes:
+
+| Palette | Dependency | Selection value |
+| --- | --- | --- |
+| `herdr-workspaces` | `herdr` | Herdr workspace ID |
+| `herdr-agents` | `herdr` | Herdr agent pane ID |
+| `files` | `fd` and a Nerd Font | File path |
+
+The Herdr palettes use the installed CLI's `herdr api snapshot` JSON and refresh
+live agent state. The file palette runs `fd` directly and applies a compact
+filetype icon map adapted from Snacks.nvim's `nvim-web-devicons` fallback.
+
+Quote the selected value when passing it to another command:
+
+```sh
+workspace_id="$(vellum herdr-workspaces)" && herdr workspace focus "$workspace_id"
+pane_id="$(vellum herdr-agents)" && herdr agent focus "$pane_id"
+file="$(vellum files)" && "${EDITOR:-vi}" -- "$file"
+```
+
 Optional global defaults live at `$XDG_CONFIG_HOME/vellum/config.toml`. Vellum
 recursively merges the selected palette over those defaults. A palette can
 therefore override one setting without repeating the rest of a global section.
 
 Vellum writes the selected item's configured value to stdout. Cancellation
-writes nothing. This makes shell integration straightforward:
-
-```sh
-agent_id="$(vellum agents)" && herdr focus "$agent_id"
-```
+writes nothing, making quoted shell integration straightforward.
 
 ## Source Format
 
@@ -64,6 +97,16 @@ or newline-delimited JSON objects:
 
 Set `source.refresh_ms` to periodically rerun the command. `0`, the default,
 disables refresh.
+
+Official palettes use maintained in-process adapters instead of shell pipelines:
+
+```toml
+[source]
+builtin = "herdr-workspaces" # or "herdr-agents" or "files"
+refresh_ms = 1000
+```
+
+Set exactly one of `source.cmd` or `source.builtin` in a complete palette.
 
 ## Configuration
 
