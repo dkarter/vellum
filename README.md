@@ -52,7 +52,7 @@ agent_id="$(vellum agents)" && herdr focus "$agent_id"
 `source.cmd` runs through `sh -c`. It must print either a JSON array:
 
 ```json
-[{"id":"agent-1","name":"OpenCode"}]
+[{ "id": "agent-1", "name": "OpenCode" }]
 ```
 
 or newline-delimited JSON objects:
@@ -168,12 +168,11 @@ normal mode.
 
 ## Schema
 
-TOML has no built-in schema standard, but Taplo and editors using Taplo can use
-JSON Schema for validation and completion. This repository includes
-`schemas/vellum.schema.json` and associates it with `examples/*.toml` through
-`taplo.toml`. For a palette elsewhere, add this first line with an appropriate
-local path or the raw GitHub URL:
+Editors using Taplo can use JSON Schema for validation and completion. This
+repository includes `schemas/vellum.schema.json` and associates it with
+`examples/*.toml` through `taplo.toml`. For a palette elsewhere, add this first
+line with an appropriate local path or the raw GitHub URL:
 
 ```toml
-#:schema ./path/to/vellum.schema.json
+#:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json
 ```
