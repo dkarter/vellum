@@ -5,12 +5,6 @@ placeholder = "Find an agent..."
 cmd = """printf '%s\n' '[{"id":"agent-1","agent":"OpenCode","workspace":"Vellum","state":"in_progress","state_color":"yellow","task":"Implementing the palette","pr":"PR #42","pr_state":"draft"},{"id":"agent-2","agent":"Claude","workspace":"Dotfiles","state":"idle","state_color":"green","task":"Waiting for work","pr":"","pr_state":""}]'"""
 refresh_ms = 1000
 
-[keybindings]
-down = "down"
-up = "up"
-accept = "enter"
-cancel = "esc"
-
 [item]
 value = "$id"
 template = [
@@ -35,8 +29,8 @@ name = "state_icon"
 source = "state"
 when = ["in_progress"]
 fg = "yellow"
-animation_fps = 3
-animation_frames = ["◐", "◓", "◑", "◒"]
+animation_fps = 5
+animation_frames = ['', '', '', '', '', '']
 
 [[item.tokens]]
 name = "state_icon"
