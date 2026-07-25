@@ -1,2 +1,5 @@
+[shell_alias]
+vellum = "cargo run --release --"
+
 [tools]
 rust = "1.97.1"
