@@ -51,3 +51,13 @@ Vellum SHALL resolve names beneath the XDG palette directory while preserving ex
 - GIVEN no palette argument
 - WHEN CLI arguments are parsed
 - THEN the named palette `default` is selected
+
+### Requirement: Synchronize official palettes
+
+Vellum SHALL expose safe and explicit-overwrite variants of the official palette sync command.
+
+#### Scenario: Palette sync commands parse {#CLI-006}
+
+- GIVEN `palettes sync` with or without `--overwrite`
+- WHEN CLI arguments are parsed
+- THEN Vellum selects safe synchronization or explicit overwrite respectively

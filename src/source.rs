@@ -98,15 +98,23 @@ mod tests {
 
     #[test]
     fn src_004_runs_successful_source_command() {
-        let items = run("printf '%s' '[{\"id\":\"one\"}]'").unwrap();
+        let items = run(&command_source("printf '%s' '[{\"id\":\"one\"}]'")).unwrap();
 
         assert_eq!(items[0]["id"], "one");
     }
 
     #[test]
     fn src_005_reports_failed_source_command() {
-        let error = run("printf 'broken source' >&2; exit 7").unwrap_err();
+        let error = run(&command_source("printf 'broken source' >&2; exit 7")).unwrap_err();
 
         assert!(error.to_string().contains("broken source"));
+    }
+
+    fn command_source(command: &str) -> SourceConfig {
+        SourceConfig {
+            cmd: Some(command.into()),
+            builtin: None,
+            refresh_ms: 0,
+        }
     }
 }

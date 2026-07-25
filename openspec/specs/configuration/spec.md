@@ -67,3 +67,19 @@ Vellum SHALL allow all configurable bindings or an individual action to be disab
 - GIVEN `keybindings.enabled = false` and an individual binding set to `false`
 - WHEN Vellum parses the palette
 - THEN global binding dispatch and that action are disabled
+
+### Requirement: Select a command or built-in source
+
+Vellum SHALL accept exactly one command or built-in source for each palette.
+
+#### Scenario: Built-in source is valid and ambiguity is rejected {#CFG-008}
+
+- GIVEN one palette with a supported built-in and another with both source variants
+- WHEN Vellum parses each palette
+- THEN the built-in is accepted and the ambiguous source is rejected
+
+#### Scenario: Palette source variant replaces global variant {#CFG-009}
+
+- GIVEN a global command source and a palette built-in source
+- WHEN Vellum merges the configuration
+- THEN only the palette built-in remains configured
