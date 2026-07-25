@@ -23,21 +23,28 @@ cargo install --path .
 
 ## Run
 
-Pass a config explicitly:
+Pass a palette path explicitly:
 
 ```sh
-cargo run -- examples/demo.toml
+cargo run --release -- examples/demo.toml
 ```
 
-With no argument, Vellum loads
-`$XDG_CONFIG_HOME/vellum/config.toml`, falling back to
-`~/.config/vellum/config.toml`.
+Or store named palettes under `$XDG_CONFIG_HOME/vellum/palettes` and invoke one
+by name. With no argument, Vellum opens the palette named `default`.
+
+```sh
+vellum agents # loads $XDG_CONFIG_HOME/vellum/palettes/agents.toml
+```
+
+Optional global defaults live at `$XDG_CONFIG_HOME/vellum/config.toml`. Vellum
+recursively merges the selected palette over those defaults. A palette can
+therefore override one setting without repeating the rest of a global section.
 
 Vellum writes the selected item's configured value to stdout. Cancellation
 writes nothing. This makes shell integration straightforward:
 
 ```sh
-agent_id="$(vellum agents.toml)" && herdr focus "$agent_id"
+agent_id="$(vellum agents)" && herdr focus "$agent_id"
 ```
 
 ## Source Format
@@ -70,13 +77,24 @@ cmd = "herdr agents --json"
 refresh_ms = 1000
 
 [keybindings]
-down = "ctrl-n"
-up = "ctrl-p"
+enabled = true
+down = ["down", "ctrl-n"]
+up = ["up", "ctrl-p"]
 accept = "enter"
 cancel = "esc"
+forward = "ctrl-f"
+backward = "ctrl-b"
+start = "ctrl-a"
+end = "ctrl-e"
+delete_word = "ctrl-w"
+
+[input]
+vim = true
+start_mode = "insert"
 
 [item]
 border = false
+padding = 1
 value = "$agent_id"
 template = [
   [
@@ -120,6 +138,8 @@ Segments aligned `right` share the remaining row space. All segments are fuzzy
 searchable by default; set `searchable = false` for decorative or volatile
 content. Item borders are disabled by default to fit cleanly inside multiplexer
 popups and panes; set `item.border = true` when Vellum provides the outer chrome.
+Horizontal item padding defaults to `1`, aligning item text with the content
+inside the search border. Set `item.padding` to any non-negative cell count.
 
 Token definitions derive a display token from another source field. Definitions
 are checked in order, and `when` matches one or more exact source values. A token
@@ -129,3 +149,31 @@ styles.
 Colors accept Ratatui names such as `cyan`, `dark_gray`, and `reset`, or RGB hex
 values such as `#7aa2f7`. A color beginning with `$` reads its value from the
 source item, allowing live state-dependent colors.
+
+## Input
+
+Readline-style bindings are enabled by default: Ctrl-N/Ctrl-P browse results,
+Ctrl-F/Ctrl-B move the input cursor, Ctrl-A/Ctrl-E jump to either end, and Ctrl-W
+deletes the previous word. Each action accepts one key, a list of keys, or
+`false`. Set `keybindings.enabled = false` to disable all configurable bindings.
+Global bindings and per-palette overrides use the same syntax.
+
+Vim input mode is enabled by default and starts in insert mode. Escape changes
+insert mode to normal mode; Escape again closes Vellum. A palette starting in
+normal mode closes on its first Escape. Normal mode supports `h`, `l`, `b`, `w`,
+`0`, `$`, `x`, `i`, `a`, `I`, `A`, `j`, and `k`. Set `input.vim = false` to use
+only regular/readline editing. Ctrl-C always cancels, regardless of mode or
+keybinding settings. The terminal cursor is a bar in insert mode and a block in
+normal mode.
+
+## Schema
+
+TOML has no built-in schema standard, but Taplo and editors using Taplo can use
+JSON Schema for validation and completion. This repository includes
+`schemas/vellum.schema.json` and associates it with `examples/*.toml` through
+`taplo.toml`. For a palette elsewhere, add this first line with an appropriate
+local path or the raw GitHub URL:
+
+```toml
+#:schema ./path/to/vellum.schema.json
+```

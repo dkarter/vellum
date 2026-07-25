@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dorian/vellum/main/schemas/vellum.schema.json",
+  "title": "Vellum configuration",
+  "description": "Global Vellum defaults or an individual palette.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "placeholder": { "type": "string", "default": "Search..." }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cmd": { "type": "string", "minLength": 1 },
+        "refresh_ms": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "vim": { "type": "boolean", "default": true },
+        "start_mode": { "enum": ["insert", "normal"], "default": "insert" }
+      }
+    },
+    "keybindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "down": { "$ref": "#/$defs/bindings" },
+        "up": { "$ref": "#/$defs/bindings" },
+        "accept": { "$ref": "#/$defs/bindings" },
+        "cancel": { "$ref": "#/$defs/bindings" },
+        "forward": { "$ref": "#/$defs/bindings" },
+        "backward": { "$ref": "#/$defs/bindings" },
+        "start": { "$ref": "#/$defs/bindings" },
+        "end": { "$ref": "#/$defs/bindings" },
+        "delete_word": { "$ref": "#/$defs/bindings" }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "border": { "type": "boolean", "default": false },
+        "padding": { "type": "integer", "minimum": 0, "maximum": 65535, "default": 1 },
+        "value": { "type": "string", "minLength": 1 },
+        "template": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/segment" },
+            "minItems": 1
+          },
+          "minItems": 1
+        },
+        "tokens": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/token" }
+        }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "foreground": { "type": "string" },
+        "background": { "type": "string" },
+        "selection_foreground": { "type": "string" },
+        "selection_background": { "type": "string" },
+        "border": { "type": "string" }
+      }
+    }
+  },
+  "$defs": {
+    "bindings": {
+      "description": "One key, multiple keys, or false to disable this action.",
+      "oneOf": [
+        { "const": false },
+        {
+          "type": "string",
+          "pattern": "^(ctrl-)?(up|down|left|right|home|end|enter|esc|escape|backspace|delete|.)$"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(ctrl-)?(up|down|left|right|home|end|enter|esc|escape|backspace|delete|.)$"
+          }
+        }
+      ]
+    },
+    "segment": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["token"],
+          "properties": {
+            "token": { "type": "string" },
+            "fg": { "type": "string" },
+            "bg": { "type": "string" },
+            "bold": { "type": "boolean", "default": false },
+            "searchable": { "type": "boolean", "default": true },
+            "align": { "enum": ["left", "right"], "default": "left" }
+          }
+        }
+      ]
+    },
+    "token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source"],
+      "properties": {
+        "name": { "type": "string" },
+        "source": { "type": "string" },
+        "when": { "type": "array", "items": { "type": "string" } },
+        "text": { "type": "string" },
+        "fg": { "type": "string" },
+        "bg": { "type": "string" },
+        "bold": { "type": "boolean", "default": false },
+        "animation_fps": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "animation_frames": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["animation_fps"] },
+          "then": { "required": ["animation_frames"] }
+        }
+      ]
+    }
+  }
+}

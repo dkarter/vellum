@@ -1,0 +1,13 @@
+#:schema ../schemas/vellum.schema.json
+
+[input]
+vim = true
+start_mode = "insert"
+
+[keybindings]
+enabled = true
+down = ["down", "ctrl-n"]
+up = ["up", "ctrl-p"]
+
+[item]
+padding = 1
