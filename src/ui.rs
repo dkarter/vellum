@@ -5,8 +5,9 @@ use ratatui::{
     layout::{Constraint, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, List, ListItem, ListState, Padding, Paragraph},
 };
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     app::App,
@@ -35,29 +36,35 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
     };
 
     if let Some(search_area) = search_area {
-        let query = if app.query.is_empty() {
-            &config.search.placeholder
+        let (query, cursor_offset) = if app.query.is_empty() {
+            (config.search.placeholder.as_str(), 0)
         } else {
-            &app.query
+            search_view(
+                &app.query,
+                app.cursor,
+                search_area.width.saturating_sub(2) as usize,
+            )
         };
-        let input = Paragraph::new(query.as_str())
-            .style(base_style(theme))
-            .block(
-                Block::new()
-                    .borders(Borders::ALL)
-                    .border_style(Style::new().fg(color(&theme.border)))
-                    .title(" Vellum "),
-            );
+        let title = if app.vim_enabled() {
+            format!(" Vellum {:?} ", app.input_mode)
+        } else {
+            " Vellum ".into()
+        };
+        let input = Paragraph::new(query).style(base_style(theme)).block(
+            Block::new()
+                .borders(Borders::ALL)
+                .border_style(Style::new().fg(color(&theme.border)))
+                .title(title),
+        );
         frame.render_widget(input, search_area);
-        if !app.query.is_empty() {
-            frame.set_cursor_position((
-                search_area.x + 1 + app.query.chars().count() as u16,
-                search_area.y + 1,
-            ));
-        }
+        frame.set_cursor_position((search_area.x + 1 + cursor_offset, search_area.y + 1));
     }
 
-    let horizontal_chrome = if config.item.border { 4 } else { 2 };
+    let horizontal_chrome = config
+        .item
+        .padding
+        .saturating_mul(2)
+        .saturating_add(if config.item.border { 2 } else { 0 });
     let inner_width = list_area.width.saturating_sub(horizontal_chrome) as usize;
     let list_items: Vec<_> = app
         .visible
@@ -77,15 +84,13 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
         } else {
             Borders::NONE
         })
+        .padding(Padding::horizontal(config.item.padding))
         .border_style(Style::new().fg(color(&theme.border)));
-    let list = List::new(list_items)
-        .block(list_block)
-        .highlight_symbol("› ")
-        .highlight_style(
-            Style::new()
-                .fg(color(&theme.selection_foreground))
-                .bg(color(&theme.selection_background)),
-        );
+    let list = List::new(list_items).block(list_block).highlight_style(
+        Style::new()
+            .fg(color(&theme.selection_foreground))
+            .bg(color(&theme.selection_background)),
+    );
     let mut state =
         ListState::default().with_selected((!app.visible.is_empty()).then_some(app.selected));
     frame.render_stateful_widget(list, list_area, &mut state);
@@ -94,15 +99,31 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
         "{}/{}  {}/{} navigate  {} select  {} cancel",
         app.visible.len(),
         app.items.len(),
-        config.keybindings.up,
-        config.keybindings.down,
-        config.keybindings.accept,
-        config.keybindings.cancel,
+        config.keybindings.display_binding(&config.keybindings.up),
+        config.keybindings.display_binding(&config.keybindings.down),
+        config
+            .keybindings
+            .display_binding(&config.keybindings.accept),
+        config
+            .keybindings
+            .display_binding(&config.keybindings.cancel),
     );
     frame.render_widget(
         Paragraph::new(footer).style(Style::new().fg(color(&theme.border))),
         footer_area,
     );
+}
+
+fn search_view(query: &str, cursor: usize, width: usize) -> (&str, u16) {
+    let mut start = 0;
+    while start < cursor && Line::from(&query[start..cursor]).width() >= width {
+        start = query[start..]
+            .grapheme_indices(true)
+            .nth(1)
+            .map_or(cursor, |(offset, _)| start + offset);
+    }
+    let cursor_offset = Line::from(&query[start..cursor]).width() as u16;
+    (&query[start..], cursor_offset)
 }
 
 fn render_row<'a>(row: &'a RenderedRow, width: usize, theme: &Theme) -> Line<'a> {
@@ -188,6 +209,7 @@ mod tests {
                 .collect(),
             config.item.clone(),
             config.keybindings.clone(),
+            config.input.clone(),
             true,
         );
         let backend = TestBackend::new(50, 9);
@@ -206,6 +228,7 @@ mod tests {
         assert!(output.contains("1/1"));
         assert_ne!(buffer[(0, 3)].symbol(), "│");
         assert_ne!(buffer[(49, 3)].symbol(), "│");
+        assert_eq!(buffer[(1, 3)].symbol(), "O");
     }
 
     #[test]
@@ -233,6 +256,7 @@ mod tests {
                 .collect(),
             config.item.clone(),
             config.keybindings.clone(),
+            config.input.clone(),
             false,
         );
         let backend = TestBackend::new(20, 4);
@@ -244,5 +268,92 @@ mod tests {
 
         assert_eq!(terminal.backend().buffer()[(0, 0)].symbol(), "│");
         assert_eq!(terminal.backend().buffer()[(19, 0)].symbol(), "│");
+    }
+
+    #[test]
+    fn applies_configurable_item_padding() {
+        let mut config = Config::parse(
+            r#"
+                [source]
+                cmd = "unused"
+
+                [item]
+                padding = 3
+                template = [["$name"]]
+                value = "$id"
+            "#,
+        )
+        .unwrap();
+        config.search.enabled = false;
+        let source = json!([{ "id": "1", "name": "OpenCode" }]);
+        let mut app = App::new(
+            source
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item.as_object().unwrap().clone())
+                .collect(),
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.input.clone(),
+            false,
+        );
+        let backend = TestBackend::new(20, 4);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+
+        assert_eq!(terminal.backend().buffer()[(2, 0)].symbol(), " ");
+        assert_eq!(terminal.backend().buffer()[(3, 0)].symbol(), "O");
+    }
+
+    #[test]
+    fn large_padding_saturates_on_narrow_terminals() {
+        let mut config = Config::parse(
+            r#"
+                [source]
+                cmd = "unused"
+
+                [item]
+                padding = 65535
+                template = [["$name"]]
+                value = "$id"
+            "#,
+        )
+        .unwrap();
+        config.search.enabled = false;
+        let source = json!([{ "id": "1", "name": "OpenCode" }]);
+        let mut app = App::new(
+            source
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item.as_object().unwrap().clone())
+                .collect(),
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.input.clone(),
+            false,
+        );
+        let backend = TestBackend::new(10, 3);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+    }
+
+    #[test]
+    fn search_view_keeps_long_query_cursor_inside_input() {
+        let (view, offset) = search_view("abcdefgh", 8, 4);
+        assert_eq!(view, "fgh");
+        assert_eq!(offset, 3);
+
+        let query = "界界界";
+        let (view, offset) = search_view(query, query.len(), 4);
+        assert_eq!(view, "界");
+        assert_eq!(offset, 2);
     }
 }

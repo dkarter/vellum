@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, bail};
-use serde::Deserialize;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use serde::{Deserialize, Deserializer};
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -9,6 +10,8 @@ pub struct Config {
     pub source: SourceConfig,
     #[serde(default)]
     pub keybindings: Keybindings,
+    #[serde(default)]
+    pub input: InputConfig,
     pub item: ItemConfig,
     #[serde(default)]
     pub theme: Theme,
@@ -41,31 +44,164 @@ pub struct SourceConfig {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct Keybindings {
-    pub down: String,
-    pub up: String,
-    pub accept: String,
-    pub cancel: String,
+    pub enabled: bool,
+    pub down: Bindings,
+    pub up: Bindings,
+    pub accept: Bindings,
+    pub cancel: Bindings,
+    pub forward: Bindings,
+    pub backward: Bindings,
+    pub start: Bindings,
+    pub end: Bindings,
+    pub delete_word: Bindings,
 }
 
 impl Default for Keybindings {
     fn default() -> Self {
         Self {
-            down: "down".into(),
-            up: "up".into(),
-            accept: "enter".into(),
-            cancel: "esc".into(),
+            enabled: true,
+            down: Bindings::new(["down", "ctrl-n"]),
+            up: Bindings::new(["up", "ctrl-p"]),
+            accept: Bindings::new(["enter"]),
+            cancel: Bindings::new(["esc"]),
+            forward: Bindings::new(["ctrl-f"]),
+            backward: Bindings::new(["ctrl-b"]),
+            start: Bindings::new(["ctrl-a"]),
+            end: Bindings::new(["ctrl-e"]),
+            delete_word: Bindings::new(["ctrl-w"]),
         }
     }
 }
 
 impl Keybindings {
-    pub fn normalized(mut self) -> Self {
-        self.down.make_ascii_lowercase();
-        self.up.make_ascii_lowercase();
-        self.accept.make_ascii_lowercase();
-        self.cancel.make_ascii_lowercase();
-        self
+    pub fn display_binding<'a>(&self, bindings: &'a Bindings) -> &'a str {
+        if self.enabled {
+            bindings.label()
+        } else {
+            "disabled"
+        }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bindings(pub Vec<Binding>);
+
+impl Bindings {
+    fn new<const N: usize>(values: [&str; N]) -> Self {
+        Self(
+            values
+                .into_iter()
+                .map(|value| Binding::parse(value).expect("default bindings must be valid"))
+                .collect(),
+        )
+    }
+
+    pub fn label(&self) -> &str {
+        self.0.first().map_or("disabled", |binding| &binding.label)
+    }
+
+    pub fn matches(&self, key: KeyEvent) -> bool {
+        self.0
+            .iter()
+            .any(|binding| binding.code == key.code && binding.modifiers == key.modifiers)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Binding {
+    label: String,
+    code: KeyCode,
+    modifiers: KeyModifiers,
+}
+
+impl Binding {
+    fn parse(value: &str) -> Result<Self> {
+        let label = value.to_ascii_lowercase();
+        let (modifiers, name) = label
+            .strip_prefix("ctrl-")
+            .map_or((KeyModifiers::NONE, label.as_str()), |name| {
+                (KeyModifiers::CONTROL, name)
+            });
+        let code = match name {
+            "up" => KeyCode::Up,
+            "down" => KeyCode::Down,
+            "left" => KeyCode::Left,
+            "right" => KeyCode::Right,
+            "home" => KeyCode::Home,
+            "end" => KeyCode::End,
+            "enter" => KeyCode::Enter,
+            "esc" | "escape" => KeyCode::Esc,
+            "backspace" => KeyCode::Backspace,
+            "delete" => KeyCode::Delete,
+            value => {
+                let mut chars = value.chars();
+                match (chars.next(), chars.next()) {
+                    (Some(character), None) => KeyCode::Char(character),
+                    _ => bail!("unsupported keybinding '{value}'"),
+                }
+            }
+        };
+        Ok(Self {
+            label,
+            code,
+            modifiers,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for Bindings {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Value {
+            Enabled(bool),
+            One(String),
+            Many(Vec<String>),
+        }
+
+        match Value::deserialize(deserializer)? {
+            Value::Enabled(false) => Ok(Self(Vec::new())),
+            Value::Enabled(true) => Err(serde::de::Error::custom(
+                "use a key name or list of key names to enable a binding",
+            )),
+            Value::One(value) => Binding::parse(&value)
+                .map(|binding| Self(vec![binding]))
+                .map_err(serde::de::Error::custom),
+            Value::Many(values) => values
+                .iter()
+                .map(|value| Binding::parse(value))
+                .collect::<Result<Vec<_>>>()
+                .map(Self)
+                .map_err(serde::de::Error::custom),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct InputConfig {
+    pub vim: bool,
+    pub start_mode: InputMode,
+}
+
+impl Default for InputConfig {
+    fn default() -> Self {
+        Self {
+            vim: true,
+            start_mode: InputMode::Insert,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InputMode {
+    Normal,
+    #[default]
+    Insert,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -73,6 +209,8 @@ impl Keybindings {
 pub struct ItemConfig {
     #[serde(default)]
     pub border: bool,
+    #[serde(default = "default_padding")]
+    pub padding: u16,
     #[serde(default)]
     pub tokens: Vec<TokenDefinition>,
     pub template: Vec<Vec<SegmentConfig>>,
@@ -155,7 +293,21 @@ impl Default for Theme {
 
 impl Config {
     pub fn parse(input: &str) -> Result<Self> {
-        let config: Self = toml::from_str(input).context("invalid Vellum configuration")?;
+        Self::parse_layered(None, input)
+    }
+
+    pub fn parse_layered(global: Option<&str>, palette: &str) -> Result<Self> {
+        let mut value = match global {
+            Some(global) => {
+                toml::from_str(global).context("invalid global Vellum configuration")?
+            }
+            None => toml::Value::Table(Default::default()),
+        };
+        let palette = toml::from_str(palette).context("invalid Vellum palette")?;
+        merge(&mut value, palette);
+        let config: Self = value
+            .try_into()
+            .context("invalid merged Vellum configuration")?;
         config.validate()?;
         Ok(config)
     }
@@ -169,14 +321,6 @@ impl Config {
         }
         if self.item.value.trim().is_empty() {
             bail!("item.value cannot be empty");
-        }
-        for binding in [
-            &self.keybindings.down,
-            &self.keybindings.up,
-            &self.keybindings.accept,
-            &self.keybindings.cancel,
-        ] {
-            validate_binding(binding)?;
         }
         for token in &self.item.tokens {
             if token.name.trim().is_empty() || token.source.trim().is_empty() {
@@ -196,22 +340,28 @@ impl Config {
     }
 }
 
-fn validate_binding(binding: &str) -> Result<()> {
-    let normalized = binding.to_ascii_lowercase();
-    let name = normalized.strip_prefix("ctrl-").unwrap_or(&normalized);
-    let named = matches!(
-        name,
-        "up" | "down" | "left" | "right" | "enter" | "esc" | "escape" | "backspace"
-    );
-    if named || name.chars().count() == 1 {
-        Ok(())
-    } else {
-        bail!("unsupported keybinding '{binding}'")
+fn merge(base: &mut toml::Value, overlay: toml::Value) {
+    match (base, overlay) {
+        (toml::Value::Table(base), toml::Value::Table(overlay)) => {
+            for (key, value) in overlay {
+                match base.get_mut(&key) {
+                    Some(existing) => merge(existing, value),
+                    None => {
+                        base.insert(key, value);
+                    }
+                }
+            }
+        }
+        (base, overlay) => *base = overlay,
     }
 }
 
 const fn default_true() -> bool {
     true
+}
+
+const fn default_padding() -> u16 {
+    1
 }
 
 #[cfg(test)]
@@ -232,7 +382,11 @@ mod tests {
         let config = Config::parse(MINIMAL).unwrap();
 
         assert!(config.search.enabled);
-        assert_eq!(config.keybindings.accept, "enter");
+        assert_eq!(config.keybindings.accept.label(), "enter");
+        assert_eq!(config.keybindings.down.0[1].label, "ctrl-n");
+        assert!(config.input.vim);
+        assert_eq!(config.input.start_mode, InputMode::Insert);
+        assert_eq!(config.item.padding, 1);
         assert_eq!(config.theme.selection_background, "cyan");
     }
 
@@ -288,6 +442,42 @@ mod tests {
 
         let binding =
             Config::parse(&format!("{MINIMAL}\n[keybindings]\ncancel = 'quit'")).unwrap_err();
-        assert!(binding.to_string().contains("unsupported keybinding"));
+        assert!(format!("{binding:#}").contains("unsupported keybinding"));
+    }
+
+    #[test]
+    fn merges_global_defaults_under_palette_overrides() {
+        let global = r#"
+            [search]
+            placeholder = "Global"
+
+            [input]
+            start_mode = "normal"
+
+            [keybindings]
+            down = ["ctrl-j"]
+
+            [item]
+            padding = 3
+        "#;
+        let palette = format!("{MINIMAL}\n[search]\nplaceholder = 'Palette'");
+
+        let config = Config::parse_layered(Some(global), &palette).unwrap();
+
+        assert_eq!(config.search.placeholder, "Palette");
+        assert_eq!(config.input.start_mode, InputMode::Normal);
+        assert_eq!(config.keybindings.down.label(), "ctrl-j");
+        assert_eq!(config.item.padding, 3);
+    }
+
+    #[test]
+    fn allows_individual_bindings_and_all_bindings_to_be_disabled() {
+        let config = Config::parse(&format!(
+            "{MINIMAL}\n[keybindings]\nenabled = false\ndown = false"
+        ))
+        .unwrap();
+
+        assert!(!config.keybindings.enabled);
+        assert!(config.keybindings.down.0.is_empty());
     }
 }

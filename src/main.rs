@@ -1,5 +1,5 @@
 use std::{
-    env, fs,
+    env, fs, io,
     path::PathBuf,
     sync::mpsc::{self, Receiver, TryRecvError},
     thread,
@@ -7,7 +7,11 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use crossterm::event::{self, Event, KeyEventKind};
+use crossterm::{
+    cursor::SetCursorStyle,
+    event::{self, Event, KeyEventKind},
+    execute,
+};
 use vellum::{
     app::{App, Outcome},
     config::Config,
@@ -17,8 +21,8 @@ use vellum::{
 const REFRESH_POLL_RATE: Duration = Duration::from_millis(50);
 
 fn main() -> Result<()> {
-    let config_path = match cli(env::args().skip(1))? {
-        Cli::Run(path) => path,
+    let palette = match cli(env::args().skip(1))? {
+        Cli::Run(palette) => palette,
         Cli::Help => {
             print_help();
             return Ok(());
@@ -28,20 +32,36 @@ fn main() -> Result<()> {
             return Ok(());
         }
     };
-    let config_text = fs::read_to_string(&config_path)
-        .with_context(|| format!("failed to read {}", config_path.display()))?;
-    let config = Config::parse(&config_text)?;
+    let config_root = config_root();
+    let palette_path = palette_path(&palette, config_root.as_deref())?;
+    let palette = fs::read_to_string(&palette_path)
+        .with_context(|| format!("failed to read palette {}", palette_path.display()))?;
+    let global = match config_root.map(|root| root.join("config.toml")) {
+        Some(global_path) => match fs::read_to_string(&global_path) {
+            Ok(global) => Some(global),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("failed to read {}", global_path.display()));
+            }
+        },
+        None => None,
+    };
+    let config = Config::parse_layered(global.as_deref(), &palette)?;
     let source_items = source::run(&config.source.cmd)?;
     let mut app = App::new(
         source_items,
         config.item.clone(),
         config.keybindings.clone(),
+        config.input.clone(),
         config.search.enabled,
     );
 
     let mut terminal = ratatui::try_init().context("failed to initialize terminal")?;
     let result = run(&mut terminal, &mut app, &config);
+    let cursor_result = execute!(io::stdout(), SetCursorStyle::DefaultUserShape);
     ratatui::restore();
+    cursor_result?;
     let outcome = result?;
     if let Outcome::Accepted(value) = outcome {
         println!("{value}");
@@ -57,9 +77,14 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App, config: &Config) 
     let refresh_interval = Duration::from_millis(config.source.refresh_ms);
     let animation_interval = app.animation_interval();
     let mut dirty = true;
+    let mut cursor_mode = None;
     loop {
         if dirty {
             terminal.draw(|frame| ui::render(frame, app, config))?;
+            if cursor_mode != Some(app.input_mode) {
+                set_cursor_style(app.input_mode)?;
+                cursor_mode = Some(app.input_mode);
+            }
             dirty = false;
         }
 
@@ -103,6 +128,15 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App, config: &Config) 
     }
 }
 
+fn set_cursor_style(mode: vellum::config::InputMode) -> Result<()> {
+    let style = match mode {
+        vellum::config::InputMode::Insert => SetCursorStyle::SteadyBar,
+        vellum::config::InputMode::Normal => SetCursorStyle::SteadyBlock,
+    };
+    execute!(io::stdout(), style)?;
+    Ok(())
+}
+
 fn next_timeout(
     animation_interval: Option<Duration>,
     last_animation: Instant,
@@ -143,7 +177,7 @@ fn receive_refresh(
 
 #[derive(Debug, PartialEq, Eq)]
 enum Cli {
-    Run(PathBuf),
+    Run(String),
     Help,
     Version,
 }
@@ -156,23 +190,34 @@ fn cli(mut args: impl Iterator<Item = String>) -> Result<Cli> {
     match first.as_deref() {
         Some("-h" | "--help") => Ok(Cli::Help),
         Some("-V" | "--version") => Ok(Cli::Version),
-        Some(path) => Ok(Cli::Run(PathBuf::from(path))),
-        None => default_config_path().map(Cli::Run),
+        Some(palette) => Ok(Cli::Run(palette.to_owned())),
+        None => Ok(Cli::Run("default".into())),
     }
 }
 
-fn default_config_path() -> Result<PathBuf> {
+fn config_root() -> Option<PathBuf> {
     if let Some(config_home) = env::var_os("XDG_CONFIG_HOME") {
-        return Ok(PathBuf::from(config_home).join("vellum/config.toml"));
+        return Some(PathBuf::from(config_home).join("vellum"));
     }
-    env::var_os("HOME")
-        .map(|home| PathBuf::from(home).join(".config/vellum/config.toml"))
-        .context("HOME and XDG_CONFIG_HOME are both unset; pass a configuration path")
+    env::var_os("HOME").map(|home| PathBuf::from(home).join(".config/vellum"))
+}
+
+fn palette_path(palette: &str, config_root: Option<&std::path::Path>) -> Result<PathBuf> {
+    let path = std::path::Path::new(palette);
+    if path.components().count() > 1 || path.extension().is_some() {
+        Ok(path.to_owned())
+    } else {
+        Ok(config_root
+            .context("HOME and XDG_CONFIG_HOME are both unset; use an explicit palette path")?
+            .join("palettes")
+            .join(palette)
+            .with_extension("toml"))
+    }
 }
 
 fn print_help() {
     println!(
-        "Vellum {}\n\nUsage: vellum [CONFIG]\n\nArguments:\n  CONFIG  TOML config path [default: $XDG_CONFIG_HOME/vellum/config.toml]\n\nOptions:\n  -h, --help     Print help\n  -V, --version  Print version",
+        "Vellum {}\n\nUsage: vellum [PALETTE]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nOptions:\n  -h, --help     Print help\n  -V, --version  Print version",
         env!("CARGO_PKG_VERSION")
     );
 }
@@ -184,7 +229,7 @@ mod tests {
     #[test]
     fn explicit_config_path_wins() {
         let command = cli(["custom.toml".into()].into_iter()).unwrap();
-        assert_eq!(command, Cli::Run(PathBuf::from("custom.toml")));
+        assert_eq!(command, Cli::Run("custom.toml".into()));
     }
 
     #[test]
@@ -197,5 +242,23 @@ mod tests {
     fn rejects_extra_arguments() {
         let error = cli(["one".into(), "two".into()].into_iter()).unwrap_err();
         assert!(error.to_string().contains("at most one"));
+    }
+
+    #[test]
+    fn resolves_names_under_palette_directory_and_preserves_paths() {
+        let root = PathBuf::from("/tmp/vellum");
+        assert_eq!(
+            palette_path("agents", Some(&root)).unwrap(),
+            root.join("palettes/agents.toml")
+        );
+        assert_eq!(
+            palette_path("examples/demo.toml", None).unwrap(),
+            PathBuf::from("examples/demo.toml")
+        );
+    }
+
+    #[test]
+    fn defaults_to_the_default_named_palette() {
+        assert_eq!(cli(std::iter::empty()).unwrap(), Cli::Run("default".into()));
     }
 }
