@@ -1,3 +1,4 @@
+#:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json
 [search]
 placeholder = "Find an agent..."
 
