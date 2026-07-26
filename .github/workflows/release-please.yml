@@ -1,0 +1,138 @@
+name: Release Please
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
+    runs-on: ubuntu-24.04
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Generate release app token
+        id: release_app_token
+        # v3.2.0 is an immutable GitHub release.
+        uses: actions/create-github-app-token@v3.2.0
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Release Please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          # App-authored release PRs can trigger the CI workflow.
+          token: ${{ steps.release_app_token.outputs.token }}
+          skip-labeling: true
+
+  build-release:
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    needs: release-please
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            os: linux
+            arch: x86_64
+            target: x86_64-unknown-linux-musl
+            extension: ''
+            archive: tar.gz
+          - runner: ubuntu-24.04-arm
+            os: linux
+            arch: arm64
+            target: aarch64-unknown-linux-musl
+            extension: ''
+            archive: tar.gz
+          - runner: macos-15
+            os: darwin
+            arch: arm64
+            target: aarch64-apple-darwin
+            extension: ''
+            archive: tar.gz
+          - runner: windows-2025
+            os: windows
+            arch: x86_64
+            target: x86_64-pc-windows-msvc
+            extension: .exe
+            archive: zip
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Install Rust
+        run: rustup toolchain install 1.97.1 --profile minimal --target ${{ matrix.target }}
+
+      - name: Install musl linker
+        if: ${{ matrix.os == 'linux' }}
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+
+      - name: Build release binary
+        run: cargo +1.97.1 build --locked --release --target ${{ matrix.target }}
+
+      - name: Package release asset
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+          ARCHIVE: ${{ matrix.archive }}
+          EXTENSION: ${{ matrix.extension }}
+          OS: ${{ matrix.os }}
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ needs.release-please.outputs.version }}
+        run: |
+          set -euo pipefail
+          asset="vellum_${VERSION}_${OS}_${ARCH}.${ARCHIVE}"
+          mkdir -p dist/package
+          cp "target/${TARGET}/release/vellum${EXTENSION}" dist/package/
+          cp README.md dist/package/
+          if [[ "${ARCHIVE}" == "zip" ]]; then
+            (cd dist/package && 7z a "../${asset}" '*')
+          else
+            tar -C dist/package -czf "dist/${asset}" .
+          fi
+          rm -rf dist/package
+
+      - name: Upload asset to draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release upload "${TAG_NAME}" dist/* --clobber
+
+  publish-release:
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    needs:
+      - release-please
+      - build-release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Publish release after all assets are uploaded
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release edit "${TAG_NAME}" --draft=false
