@@ -269,6 +269,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn pal_011_file_palette_uses_a_compact_path_layout() {
+        let palette = PALETTES
+            .iter()
+            .find(|palette| palette.name == "files")
+            .unwrap();
+        let config = Config::parse(palette.contents).unwrap();
+        let item = builtins::file_item(Path::new("src/main.rs")).unwrap();
+        let rendered = render_item(&item, &config.item, 0);
+
+        assert_eq!(rendered.rows.len(), 1);
+        assert_eq!(
+            rendered.rows[0]
+                .segments
+                .iter()
+                .map(|segment| segment.text.as_str())
+                .collect::<String>(),
+            format!(" src{}main.rs", std::path::MAIN_SEPARATOR)
+        );
+        assert!(rendered.rows[0].segments.last().unwrap().bold);
+    }
+
+    #[test]
+    fn pal_012_bundled_palettes_identify_their_search_inputs() {
+        for palette in PALETTES {
+            let config = Config::parse(palette.contents).unwrap();
+            assert_ne!(config.search.title, "Vellum", "{}", palette.name);
+            assert!(!config.search.title.trim().is_empty(), "{}", palette.name);
+        }
+    }
+
     fn representative_item(name: &str) -> Map<String, Value> {
         match name {
             "herdr-workspaces" => builtins::herdr_workspaces(SNAPSHOT).unwrap().remove(0),

@@ -1,6 +1,7 @@
 #:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json
 
 [search]
+title = "Workspaces"
 placeholder = "Switch workspace..."
 
 [source]
@@ -46,3 +47,6 @@ background = "#1a1b26"
 selection_foreground = "#c0caf5"
 selection_background = "#283457"
 border = "#565f89"
+mode_foreground = "#1a1b26"
+insert_mode_background = "#9ece6a"
+normal_mode_background = "#e0af68"

@@ -67,6 +67,12 @@ Vellum SHALL bundle an `fd`-backed file finder with colorful Nerd Font filetype 
 - WHEN the file palette source is evaluated
 - THEN each item has an appropriate colored icon and selects its path
 
+#### Scenario: File palette uses a compact path layout {#PAL-011}
+
+- GIVEN the bundled file finder palette
+- WHEN a file item is rendered
+- THEN its icon, parent path, and bold filename appear on one line with compact spacing
+
 ### Requirement: Keep bundled palettes compatible
 
 Vellum SHALL validate bundled palettes against its configuration and built-in source contracts.
@@ -82,3 +88,9 @@ Vellum SHALL validate bundled palettes against its configuration and built-in so
 - GIVEN representative output from each built-in source
 - WHEN each official template and selection value is resolved
 - THEN referenced fields exist and searchable text and output values are non-empty
+
+#### Scenario: Bundled palettes identify their search inputs {#PAL-012}
+
+- GIVEN the embedded official palette assets
+- WHEN their search configuration is parsed
+- THEN each palette provides a descriptive input title

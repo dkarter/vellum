@@ -224,11 +224,17 @@ pub fn file_item(path: &Path) -> Result<SourceItem> {
         .and_then(|name| name.to_str())
         .context("file name is not valid UTF-8")?;
     let parent = path.parent().and_then(Path::to_str).unwrap_or_default();
+    let parent_prefix = if parent.is_empty() || parent.ends_with(std::path::MAIN_SEPARATOR) {
+        parent.to_owned()
+    } else {
+        format!("{parent}{}", std::path::MAIN_SEPARATOR)
+    };
     let (icon, color) = file_icon(name);
     Ok(Map::from_iter([
         ("path".into(), path_text.into()),
         ("name".into(), name.into()),
         ("parent".into(), parent.into()),
+        ("parent_prefix".into(), parent_prefix.into()),
         ("icon".into(), icon.into()),
         ("icon_color".into(), color.into()),
     ]))
@@ -409,6 +415,10 @@ mod tests {
         assert_eq!(rust["path"], "src/main.rs");
         assert_eq!(rust["name"], "main.rs");
         assert_eq!(rust["parent"], "src");
+        assert_eq!(
+            rust["parent_prefix"],
+            format!("src{}", std::path::MAIN_SEPARATOR)
+        );
         assert_eq!(rust["icon"], "");
         assert_eq!(rust["icon_color"], "#DEA584");
 

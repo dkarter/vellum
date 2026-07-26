@@ -1,5 +1,6 @@
 #:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json
 [search]
+title = "Agents"
 placeholder = "Find an agent..."
 
 [source]
@@ -46,3 +47,6 @@ background = "#1a1b26"
 selection_foreground = "#1a1b26"
 selection_background = "#7aa2f7"
 border = "#565f89"
+mode_foreground = "#1a1b26"
+insert_mode_background = "#9ece6a"
+normal_mode_background = "#e0af68"

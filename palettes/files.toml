@@ -1,6 +1,7 @@
 #:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json
 
 [search]
+title = "Files"
 placeholder = "Find a file..."
 
 [source]
@@ -11,10 +12,10 @@ value = "$path"
 template = [
   [
     { token = "$icon", fg = "$icon_color", searchable = false },
-    "  ",
+    " ",
+    { token = "$parent_prefix", fg = "#565f89" },
     { token = "$name", bold = true },
   ],
-  [{ token = "$parent", fg = "#565f89" }],
 ]
 
 [theme]
@@ -23,3 +24,6 @@ background = "#1a1b26"
 selection_foreground = "#c0caf5"
 selection_background = "#283457"
 border = "#565f89"
+mode_foreground = "#1a1b26"
+insert_mode_background = "#9ece6a"
+normal_mode_background = "#e0af68"
