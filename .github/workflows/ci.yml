@@ -23,5 +23,8 @@ jobs:
       - name: Install Rust
         run: rustup toolchain install 1.97.1 --profile minimal
 
+      - name: Install test dependencies
+        run: sudo apt-get update && sudo apt-get install --yes ripgrep
+
       - name: Run tests
         run: cargo +1.97.1 test --locked
