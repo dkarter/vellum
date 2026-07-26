@@ -41,6 +41,7 @@ impl Default for FrecencyConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct SearchConfig {
     pub enabled: bool,
+    pub title: String,
     pub placeholder: String,
 }
 
@@ -48,6 +49,7 @@ impl Default for SearchConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            title: "Vellum".into(),
             placeholder: "Search...".into(),
         }
     }
@@ -300,6 +302,9 @@ pub struct Theme {
     pub selection_foreground: String,
     pub selection_background: String,
     pub border: String,
+    pub mode_foreground: String,
+    pub insert_mode_background: String,
+    pub normal_mode_background: String,
 }
 
 impl Default for Theme {
@@ -310,6 +315,9 @@ impl Default for Theme {
             selection_foreground: "black".into(),
             selection_background: "cyan".into(),
             border: "dark_gray".into(),
+            mode_foreground: "black".into(),
+            insert_mode_background: "green".into(),
+            normal_mode_background: "yellow".into(),
         }
     }
 }
@@ -428,6 +436,7 @@ mod tests {
         let config = Config::parse(MINIMAL).unwrap();
 
         assert!(config.search.enabled);
+        assert_eq!(config.search.title, "Vellum");
         assert_eq!(config.keybindings.accept.label(), "enter");
         assert_eq!(config.keybindings.down.0[1].label, "ctrl-n");
         assert!(config.input.vim);
@@ -546,6 +555,17 @@ mod tests {
 
         assert_eq!(config.source.cmd, None);
         assert_eq!(config.source.builtin, Some(BuiltinSource::Files));
+    }
+
+    #[test]
+    fn cfg_010_search_title_parses_and_layers() {
+        let global = "[search]\ntitle = 'Global'";
+        let palette = format!("{MINIMAL}\n[search]\ntitle = 'Files'");
+
+        let config = Config::parse_layered(Some(global), &palette).unwrap();
+
+        assert_eq!(config.search.title, "Files");
+        assert_eq!(Config::parse(MINIMAL).unwrap().search.title, "Vellum");
     }
 
     #[test]

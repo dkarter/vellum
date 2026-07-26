@@ -113,6 +113,7 @@ Set exactly one of `source.cmd` or `source.builtin` in a complete palette.
 ```toml
 [search]
 enabled = true
+title = "Agents"
 placeholder = "Find an agent..."
 
 [source]
@@ -177,6 +178,9 @@ background = "#1a1b26"
 selection_foreground = "#1a1b26"
 selection_background = "#7aa2f7"
 border = "#565f89"
+mode_foreground = "#1a1b26"
+insert_mode_background = "#9ece6a"
+normal_mode_background = "#e0af68"
 ```
 
 Template strings beginning with `$` read source fields. Dot paths such as
@@ -187,6 +191,7 @@ content. Item borders are disabled by default to fit cleanly inside multiplexer
 popups and panes; set `item.border = true` when Vellum provides the outer chrome.
 Horizontal item padding defaults to `1`, aligning item text with the content
 inside the search border. Set `item.padding` to any non-negative cell count.
+Set `search.title` to label the input for a specific palette.
 
 Token definitions derive a display token from another source field. Definitions
 are checked in order, and `when` matches one or more exact source values. A token
@@ -211,7 +216,9 @@ normal mode closes on its first Escape. Normal mode supports `h`, `l`, `b`, `w`,
 `0`, `$`, `x`, `i`, `a`, `I`, `A`, `j`, and `k`. Set `input.vim = false` to use
 only regular/readline editing. Ctrl-C always cancels, regardless of mode or
 keybinding settings. The terminal cursor is a bar in insert mode and a block in
-normal mode.
+normal mode. When Vim input is enabled, a colored badge at the left of the
+footer shows the active mode. Configure the badge with `theme.mode_foreground`,
+`theme.insert_mode_background`, and `theme.normal_mode_background`.
 
 ## Frecency
 
@@ -236,8 +243,9 @@ max_entries = 1000
 Editors using Taplo can use JSON Schema for validation and completion. This
 repository includes `schemas/vellum.schema.json` for palettes and
 `schemas/global.schema.json` for global defaults, with associations in
-`taplo.toml`. For a palette elsewhere, add this first line with an appropriate
-local path or the raw GitHub URL:
+`taplo.toml`. Both entry points reference `schemas/config-options.schema.json`
+for options supported in either file. For a palette elsewhere, add this first
+line with an appropriate local path or the raw GitHub URL:
 
 ```toml
 #:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json

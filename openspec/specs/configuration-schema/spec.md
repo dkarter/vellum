@@ -31,3 +31,9 @@ Vellum SHALL configure Taplo to use the bundled schema for example TOML files.
 - GIVEN Vellum's global example and schema files
 - WHEN editor schema associations are inspected
 - THEN global configuration uses `schemas/global.schema.json` and inherits all supported settings
+
+#### Scenario: Global and palette schemas share option definitions {#SCH-004}
+
+- GIVEN the global and palette schema entry points
+- WHEN their configuration fields are inspected
+- THEN both reference one bundled schema containing the shared option definitions

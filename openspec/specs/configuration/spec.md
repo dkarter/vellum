@@ -83,3 +83,13 @@ Vellum SHALL accept exactly one command or built-in source for each palette.
 - GIVEN a global command source and a palette built-in source
 - WHEN Vellum merges the configuration
 - THEN only the palette built-in remains configured
+
+### Requirement: Customize the search title
+
+Vellum SHALL allow global defaults and individual palettes to configure the title displayed on the search input.
+
+#### Scenario: Search title parses and layers {#CFG-010}
+
+- GIVEN a global search title and a palette title override
+- WHEN Vellum parses the layered configuration
+- THEN the palette title wins and omitted titles use the documented default

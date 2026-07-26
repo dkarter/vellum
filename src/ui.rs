@@ -45,11 +45,7 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
                 search_area.width.saturating_sub(2) as usize,
             )
         };
-        let title = if app.vim_enabled() {
-            format!(" Vellum {:?} ", app.input_mode)
-        } else {
-            " Vellum ".into()
-        };
+        let title = format!(" {} ", config.search.title);
         let input = Paragraph::new(query).style(base_style(theme)).block(
             Block::new()
                 .borders(Borders::ALL)
@@ -95,7 +91,7 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
         ListState::default().with_selected((!app.visible.is_empty()).then_some(app.selected));
     frame.render_stateful_widget(list, list_area, &mut state);
 
-    let footer = format!(
+    let footer_text = format!(
         "{}/{}  {}/{} navigate  {} select  {} cancel",
         app.visible.len(),
         app.items.len(),
@@ -108,10 +104,26 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
             .keybindings
             .display_binding(&config.keybindings.cancel),
     );
-    frame.render_widget(
-        Paragraph::new(footer).style(Style::new().fg(color(&theme.border))),
-        footer_area,
-    );
+    let mut footer = Vec::with_capacity(3);
+    if app.vim_enabled() {
+        let (label, background) = match app.input_mode {
+            crate::config::InputMode::Insert => (" INSERT ", &theme.insert_mode_background),
+            crate::config::InputMode::Normal => (" NORMAL ", &theme.normal_mode_background),
+        };
+        footer.push(Span::styled(
+            label,
+            Style::new()
+                .fg(color(&theme.mode_foreground))
+                .bg(color(background))
+                .add_modifier(Modifier::BOLD),
+        ));
+        footer.push(Span::raw(" "));
+    }
+    footer.push(Span::styled(
+        footer_text,
+        Style::new().fg(color(&theme.border)),
+    ));
+    frame.render_widget(Paragraph::new(Line::from(footer)), footer_area);
 }
 
 fn search_view(query: &str, cursor: usize, width: usize) -> (&str, u16) {
@@ -355,5 +367,81 @@ mod tests {
         let (view, offset) = search_view(query, query.len(), 4);
         assert_eq!(view, "界");
         assert_eq!(offset, 2);
+    }
+
+    #[test]
+    fn ui_007_vim_mode_badge_reflects_input_state() {
+        let mut config = Config::parse(
+            r#"
+                [search]
+                title = "Files"
+
+                [source]
+                cmd = "unused"
+
+                [item]
+                template = [["$name"]]
+                value = "$id"
+
+                [theme]
+                insert_mode_background = "green"
+            "#,
+        )
+        .unwrap();
+        let source = json!([{ "id": "1", "name": "main.rs" }]);
+        let source_items = source
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item.as_object().unwrap().clone())
+            .collect::<Vec<_>>();
+        let backend = TestBackend::new(40, 6);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut app = App::new(
+            source_items.clone(),
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.input.clone(),
+            true,
+        );
+
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let output: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(output.contains("Files"));
+        assert!(output.contains("INSERT"));
+        assert_eq!(buffer[(0, 5)].bg, Color::Green);
+
+        app.input_mode = crate::config::InputMode::Normal;
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let output: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(output.contains("NORMAL"));
+        assert_eq!(buffer[(0, 5)].bg, Color::Yellow);
+
+        config.input.vim = false;
+        let mut app = App::new(
+            source_items,
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.input.clone(),
+            true,
+        );
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(!output.contains("INSERT"));
+        assert!(!output.contains("NORMAL"));
     }
 }

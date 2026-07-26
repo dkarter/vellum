@@ -1,5 +1,8 @@
 #:schema ../schemas/global.schema.json
 
+[search]
+title = "Vellum"
+
 [input]
 vim = true
 start_mode = "insert"

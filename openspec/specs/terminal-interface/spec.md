@@ -53,3 +53,13 @@ Vellum SHALL horizontally viewport long queries and use a mode-specific terminal
 - GIVEN insert or normal input mode
 - WHEN Vellum applies terminal cursor style
 - THEN insert uses a steady bar and normal uses a steady block
+
+### Requirement: Show Vim mode in the footer
+
+Vellum SHALL show the active Vim mode as a colored badge at the left of the footer only when Vim input is enabled.
+
+#### Scenario: Vim mode badge reflects input state {#UI-007}
+
+- GIVEN palettes with Vim input enabled and disabled
+- WHEN each terminal frame is drawn
+- THEN the enabled frame shows a mode-colored footer badge and the disabled frame shows no mode badge

@@ -10,7 +10,7 @@ fn sch_001_bundled_schema_is_valid_json() {
     .expect("schema should be valid JSON");
 
     assert_eq!(schema["title"], "Vellum configuration");
-    assert!(schema["properties"]["item"]["properties"]["padding"].is_object());
+    assert_eq!(schema["$ref"], "./config-options.schema.json");
 }
 
 #[test]
@@ -48,6 +48,22 @@ fn sch_003_global_configuration_has_a_dedicated_schema() {
     .expect("global schema should be valid JSON");
     let example = fs::read_to_string("examples/global.toml").unwrap();
 
-    assert_eq!(schema["$ref"], "./vellum.schema.json");
+    assert_eq!(schema["$ref"], "./config-options.schema.json");
     assert!(example.starts_with("#:schema ../schemas/global.schema.json"));
+}
+
+#[test]
+fn sch_004_global_and_palette_schemas_share_option_definitions() {
+    let palette: Value =
+        serde_json::from_str(&fs::read_to_string("schemas/vellum.schema.json").unwrap()).unwrap();
+    let global: Value =
+        serde_json::from_str(&fs::read_to_string("schemas/global.schema.json").unwrap()).unwrap();
+    let shared: Value =
+        serde_json::from_str(&fs::read_to_string("schemas/config-options.schema.json").unwrap())
+            .unwrap();
+
+    assert_eq!(palette["$ref"], "./config-options.schema.json");
+    assert_eq!(global["$ref"], palette["$ref"]);
+    assert!(shared["properties"]["search"]["properties"]["title"].is_object());
+    assert!(shared["properties"]["theme"]["properties"]["insert_mode_background"].is_object());
 }
