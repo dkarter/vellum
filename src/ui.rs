@@ -66,10 +66,11 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
         .visible
         .iter()
         .map(|&index| {
+            let selected = app.visible.get(app.selected) == Some(&index);
             let lines: Vec<_> = app.items[index]
                 .rows
                 .iter()
-                .map(|row| render_row(row, inner_width, theme))
+                .map(|row| render_row(row, inner_width, theme, selected))
                 .collect();
             ListItem::new(lines)
         })
@@ -82,11 +83,9 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
         })
         .padding(Padding::horizontal(config.item.padding))
         .border_style(Style::new().fg(color(&theme.border)));
-    let list = List::new(list_items).block(list_block).highlight_style(
-        Style::new()
-            .fg(color(&theme.selection_foreground))
-            .bg(color(&theme.selection_background)),
-    );
+    let list = List::new(list_items)
+        .block(list_block)
+        .highlight_style(Style::new().bg(color(&theme.selection_background)));
     let mut state =
         ListState::default().with_selected((!app.visible.is_empty()).then_some(app.selected));
     frame.render_stateful_widget(list, list_area, &mut state);
@@ -138,7 +137,7 @@ fn search_view(query: &str, cursor: usize, width: usize) -> (&str, u16) {
     (&query[start..], cursor_offset)
 }
 
-fn render_row<'a>(row: &'a RenderedRow, width: usize, theme: &Theme) -> Line<'a> {
+fn render_row<'a>(row: &'a RenderedRow, width: usize, theme: &Theme, selected: bool) -> Line<'a> {
     let split = row
         .segments
         .iter()
@@ -148,12 +147,15 @@ fn render_row<'a>(row: &'a RenderedRow, width: usize, theme: &Theme) -> Line<'a>
     });
     let left_width: usize = left.iter().map(display_width).sum();
     let right_width: usize = right.iter().map(display_width).sum();
-    let mut spans: Vec<_> = left.iter().map(|segment| span(segment, theme)).collect();
+    let mut spans: Vec<_> = left
+        .iter()
+        .map(|segment| span(segment, theme, selected))
+        .collect();
     if !right.is_empty() {
         spans.push(Span::raw(
             " ".repeat(width.saturating_sub(left_width + right_width)),
         ));
-        spans.extend(right.iter().map(|segment| span(segment, theme)));
+        spans.extend(right.iter().map(|segment| span(segment, theme, selected)));
     }
     Line::from(spans)
 }
@@ -162,12 +164,18 @@ fn display_width(segment: &RenderedSegment) -> usize {
     Line::from(segment.text.as_str()).width()
 }
 
-fn span<'a>(segment: &'a RenderedSegment, theme: &Theme) -> Span<'a> {
+fn span<'a>(segment: &'a RenderedSegment, theme: &Theme, selected: bool) -> Span<'a> {
     let mut style = Style::new()
-        .fg(segment
-            .fg
-            .as_deref()
-            .map_or_else(|| color(&theme.foreground), color))
+        .fg(segment.fg.as_deref().map_or_else(
+            || {
+                color(if selected {
+                    &theme.selection_foreground
+                } else {
+                    &theme.foreground
+                })
+            },
+            color,
+        ))
         .bg(segment
             .bg
             .as_deref()

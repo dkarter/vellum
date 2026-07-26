@@ -33,13 +33,20 @@ Vellum SHALL install bundled palettes into the XDG palette directory without sil
 
 ### Requirement: Provide a Herdr workspace palette
 
-Vellum SHALL bundle a workspace switcher showing active agents and their states for each Herdr workspace.
+Vellum SHALL bundle a compact workspace switcher showing workspace identity, checkout path, and aggregate status.
 
 #### Scenario: Workspace palette exposes agent context {#PAL-003}
 
 - GIVEN Herdr reports workspaces and active agents
 - WHEN the workspace palette source is evaluated
 - THEN each workspace item includes agent identity and state and selects a workspace identifier
+
+#### Scenario: Workspace palette uses an aligned two-line layout {#PAL-013}
+
+- GIVEN the bundled Herdr workspace palette
+- WHEN a workspace item is rendered
+- THEN its name and status share the first row, its checkout path uses the second row, and numeric and agent-detail metadata are hidden
+- AND the workspace name aligns with the folder icon while focus is indicated by color instead of a leading glyph
 
 ### Requirement: Provide a Herdr agent palette
 

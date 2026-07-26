@@ -116,13 +116,16 @@ fn atomic_replace(path: &Path, contents: &str) -> Result<()> {
 mod tests {
     use std::{fs, path::PathBuf};
 
+    use ratatui::{Terminal, backend::TestBackend, style::Color};
     use serde_json::{Map, Value};
 
     use super::*;
     use crate::{
+        app::App,
         builtins,
         config::{Config, SegmentConfig},
         item::render_item,
+        ui,
     };
 
     const SNAPSHOT: &str = r#"{
@@ -300,6 +303,62 @@ mod tests {
         }
     }
 
+    #[test]
+    fn pal_013_workspace_palette_uses_an_aligned_two_line_layout() {
+        let palette = PALETTES
+            .iter()
+            .find(|palette| palette.name == "herdr-workspaces")
+            .unwrap();
+        let config = Config::parse(palette.contents).unwrap();
+        let item = representative_item(palette.name);
+        let rendered = render_item(&item, &config.item, 0);
+        let template: Vec<Vec<_>> = config
+            .item
+            .template
+            .iter()
+            .map(|row| row.iter().map(segment_token).collect())
+            .collect();
+
+        assert_eq!(
+            template,
+            [
+                vec!["$label", "$status_icon", " ", "$agent_status",],
+                vec!["󰉋 ", "$checkout_path"],
+            ]
+        );
+        assert_eq!(rendered.rows.len(), 2);
+        assert_eq!(rendered.rows[0].segments[0].text, "vellum");
+        assert_eq!(rendered.rows[0].segments[0].fg.as_deref(), Some("#7aa2f7"));
+        assert!(rendered.rows[0].segments[0].bold);
+        assert_eq!(rendered.rows[1].segments[0].text, "󰉋 ");
+        assert_eq!(
+            rendered.rows[0].segments.last().unwrap().align,
+            crate::config::Alignment::Right
+        );
+        assert!(
+            rendered.rows[1]
+                .segments
+                .iter()
+                .any(|segment| segment.text == "/tmp/vellum")
+        );
+
+        let mut app = App::new(
+            vec![item],
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.input.clone(),
+            config.search.enabled,
+        );
+        let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
+        terminal
+            .draw(|frame| ui::render(frame, &mut app, &config))
+            .unwrap();
+        assert_eq!(
+            terminal.backend().buffer()[(1, 3)].fg,
+            Color::Rgb(122, 162, 247)
+        );
+    }
+
     fn representative_item(name: &str) -> Map<String, Value> {
         match name {
             "herdr-workspaces" => builtins::herdr_workspaces(SNAPSHOT).unwrap().remove(0),
@@ -315,11 +374,8 @@ mod tests {
             .template
             .iter()
             .flatten()
-            .map(|segment| match segment {
-                SegmentConfig::Token(token) => token,
-                SegmentConfig::Styled(segment) => &segment.token,
-            })
-            .chain(std::iter::once(&config.item.value));
+            .map(segment_token)
+            .chain(std::iter::once(config.item.value.as_str()));
         for expression in expressions {
             let Some(field) = expression.strip_prefix('$') else {
                 continue;
@@ -330,6 +386,13 @@ mod tests {
                 derived || item.contains_key(field),
                 "{name} references missing source field {field}"
             );
+        }
+    }
+
+    fn segment_token(segment: &SegmentConfig) -> &str {
+        match segment {
+            SegmentConfig::Token(token) => token,
+            SegmentConfig::Styled(segment) => &segment.token,
         }
     }
 }
