@@ -247,6 +247,28 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[test]
+    fn pal_010_agent_pane_id_is_output_only() {
+        let palette = PALETTES
+            .iter()
+            .find(|palette| palette.name == "herdr-agents")
+            .unwrap();
+        let config = Config::parse(palette.contents).unwrap();
+
+        assert_eq!(config.item.value, "$pane_id");
+        assert!(
+            config
+                .item
+                .template
+                .iter()
+                .flatten()
+                .all(|segment| match segment {
+                    SegmentConfig::Token(token) => token != "$pane_id",
+                    SegmentConfig::Styled(segment) => segment.token != "$pane_id",
+                })
+        );
+    }
+
     fn representative_item(name: &str) -> Map<String, Value> {
         match name {
             "herdr-workspaces" => builtins::herdr_workspaces(SNAPSHOT).unwrap().remove(0),

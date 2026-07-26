@@ -1,4 +1,4 @@
-#:schema https://raw.githubusercontent.com/dorian/vellum/main/schemas/vellum.schema.json
+#:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json
 
 [search]
 placeholder = "Switch agent..."
@@ -22,7 +22,6 @@ template = [
     { token = "$workspace_label", fg = "#7dcfff", bold = true },
     "  ",
     { token = "$cwd", fg = "#565f89" },
-    { token = "$pane_id", fg = "#565f89", searchable = false, align = "right" },
   ],
 ]
 

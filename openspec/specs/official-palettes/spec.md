@@ -51,6 +51,12 @@ Vellum SHALL bundle an agent switcher showing each active agent's status.
 - WHEN the agent palette source is evaluated
 - THEN each item includes agent status and selects an agent identifier
 
+#### Scenario: Agent pane ID is output-only {#PAL-010}
+
+- GIVEN the bundled Herdr agent palette
+- WHEN an agent item is rendered
+- THEN the pane ID remains the selection value but is not displayed in the item template
+
 ### Requirement: Provide a file finder palette
 
 Vellum SHALL bundle an `fd`-backed file finder with colorful Nerd Font filetype icons.
