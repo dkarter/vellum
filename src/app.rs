@@ -1,9 +1,12 @@
+use std::collections::HashMap;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     config::{Bindings, InputConfig, InputMode, ItemConfig, Keybindings},
-    item::{RenderedItem, matching_indices, render_items},
+    frecency::FrecencyRank,
+    item::{RenderedItem, matching_indices_with_frecency, render_items},
     source::SourceItem,
 };
 
@@ -21,6 +24,7 @@ pub struct App {
     input_config: InputConfig,
     search_enabled: bool,
     source_items: Vec<SourceItem>,
+    frecency_scores: HashMap<String, FrecencyRank>,
     pub items: Vec<RenderedItem>,
     pub visible: Vec<usize>,
     pub query: String,
@@ -38,13 +42,32 @@ impl App {
         input_config: InputConfig,
         search_enabled: bool,
     ) -> Self {
+        Self::new_with_frecency(
+            source_items,
+            item_config,
+            keybindings,
+            input_config,
+            search_enabled,
+            HashMap::new(),
+        )
+    }
+
+    pub fn new_with_frecency(
+        source_items: Vec<SourceItem>,
+        item_config: ItemConfig,
+        keybindings: Keybindings,
+        input_config: InputConfig,
+        search_enabled: bool,
+        frecency_scores: HashMap<String, FrecencyRank>,
+    ) -> Self {
         let items = render_items(&source_items, &item_config, 0);
-        let visible = matching_indices(&items, "");
+        let visible = matching_indices_with_frecency(&items, "", &frecency_scores);
         Self {
             item_config,
             keybindings,
             search_enabled,
             source_items,
+            frecency_scores,
             items,
             visible,
             query: String::new(),
@@ -101,7 +124,8 @@ impl App {
 
     pub fn tick(&mut self, elapsed_ms: u64) {
         self.items = render_items(&self.source_items, &self.item_config, elapsed_ms);
-        self.visible = matching_indices(&self.items, &self.query);
+        self.visible =
+            matching_indices_with_frecency(&self.items, &self.query, &self.frecency_scores);
         self.clamp_selection();
     }
 
@@ -121,7 +145,8 @@ impl App {
         let selected_value = self.selected_item().map(|item| item.value.clone());
         self.source_items = source_items;
         self.items = render_items(&self.source_items, &self.item_config, elapsed_ms);
-        self.visible = matching_indices(&self.items, &self.query);
+        self.visible =
+            matching_indices_with_frecency(&self.items, &self.query, &self.frecency_scores);
         self.selected = selected_value
             .and_then(|value| {
                 self.visible
@@ -150,7 +175,8 @@ impl App {
     }
 
     fn refilter(&mut self) {
-        self.visible = matching_indices(&self.items, &self.query);
+        self.visible =
+            matching_indices_with_frecency(&self.items, &self.query, &self.frecency_scores);
         self.selected = 0;
     }
 

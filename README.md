@@ -135,6 +135,10 @@ delete_word = "ctrl-w"
 vim = true
 start_mode = "insert"
 
+[frecency]
+enabled = true
+max_entries = 1000
+
 [item]
 border = false
 padding = 1
@@ -209,12 +213,31 @@ only regular/readline editing. Ctrl-C always cancels, regardless of mode or
 keybinding settings. The terminal cursor is a bar in insert mode and a block in
 normal mode.
 
+## Frecency
+
+Frecency is enabled by default. Entries selected frequently and recently are
+hoisted above unseen entries, with exact last-use time breaking equal scores.
+History is scoped by palette, so recent agents automatically appear first in
+`herdr-agents` without affecting file or workspace ordering.
+
+Vellum stores bounded history in SQLite at
+`$XDG_DATA_HOME/vellum/frecency.sqlite3`, falling back to
+`~/.local/share/vellum/frecency.sqlite3`. Set `VELLUM_DATA` to override the
+complete data directory. Global or palette configuration can disable or bound history:
+
+```toml
+[frecency]
+enabled = false
+max_entries = 1000
+```
+
 ## Schema
 
 Editors using Taplo can use JSON Schema for validation and completion. This
-repository includes `schemas/vellum.schema.json` and associates it with
-`examples/*.toml` through `taplo.toml`. For a palette elsewhere, add this first
-line with an appropriate local path or the raw GitHub URL:
+repository includes `schemas/vellum.schema.json` for palettes and
+`schemas/global.schema.json` for global defaults, with associations in
+`taplo.toml`. For a palette elsewhere, add this first line with an appropriate
+local path or the raw GitHub URL:
 
 ```toml
 #:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json

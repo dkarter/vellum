@@ -25,3 +25,9 @@ Vellum SHALL configure Taplo to use the bundled schema for example TOML files.
 - GIVEN the repository Taplo configuration
 - WHEN its example-file rule is inspected
 - THEN the rule points to `schemas/vellum.schema.json`
+
+#### Scenario: Global configuration has a dedicated schema {#SCH-003}
+
+- GIVEN Vellum's global example and schema files
+- WHEN editor schema associations are inspected
+- THEN global configuration uses `schemas/global.schema.json` and inherits all supported settings

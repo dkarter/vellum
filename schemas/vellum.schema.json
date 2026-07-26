@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/dorian/vellum/main/schemas/vellum.schema.json",
+  "$id": "https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json",
   "title": "Vellum configuration",
   "description": "Global Vellum defaults or an individual palette.",
   "type": "object",
@@ -36,6 +36,14 @@
       "properties": {
         "vim": { "type": "boolean", "default": true },
         "start_mode": { "enum": ["insert", "normal"], "default": "insert" }
+      }
+    },
+    "frecency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "max_entries": { "type": "integer", "minimum": 1, "default": 1000 }
       }
     },
     "keybindings": {

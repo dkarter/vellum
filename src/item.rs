@@ -1,7 +1,12 @@
+use std::{cmp::Ordering, collections::HashMap};
+
 use nucleo_matcher::{Config as MatcherConfig, Matcher, Utf32Str, pattern::Pattern};
 use serde_json::{Map, Value};
 
-use crate::config::{Alignment, ItemConfig, SegmentConfig, StyledSegment, TokenDefinition};
+use crate::{
+    config::{Alignment, ItemConfig, SegmentConfig, StyledSegment, TokenDefinition},
+    frecency::FrecencyRank,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderedItem {
@@ -68,27 +73,46 @@ pub fn render_item(
 }
 
 pub fn matching_indices(items: &[RenderedItem], query: &str) -> Vec<usize> {
-    if query.is_empty() {
-        return (0..items.len()).collect();
-    }
+    matching_indices_with_frecency(items, query, &HashMap::new())
+}
 
-    let pattern = Pattern::parse(
-        query,
-        nucleo_matcher::pattern::CaseMatching::Smart,
-        nucleo_matcher::pattern::Normalization::Smart,
-    );
-    let mut matcher = Matcher::new(MatcherConfig::DEFAULT);
-    let mut buffer = Vec::new();
-    let mut matches: Vec<_> = items
-        .iter()
-        .enumerate()
-        .filter_map(|(index, item)| {
-            pattern
-                .score(Utf32Str::new(&item.search_text, &mut buffer), &mut matcher)
-                .map(|score| (index, score))
-        })
-        .collect();
-    matches.sort_unstable_by_key(|&(index, score)| (std::cmp::Reverse(score), index));
+pub fn matching_indices_with_frecency(
+    items: &[RenderedItem],
+    query: &str,
+    frecency: &HashMap<String, FrecencyRank>,
+) -> Vec<usize> {
+    let mut matches: Vec<_> = if query.is_empty() {
+        (0..items.len()).map(|index| (index, 0)).collect()
+    } else {
+        let pattern = Pattern::parse(
+            query,
+            nucleo_matcher::pattern::CaseMatching::Smart,
+            nucleo_matcher::pattern::Normalization::Smart,
+        );
+        let mut matcher = Matcher::new(MatcherConfig::DEFAULT);
+        let mut buffer = Vec::new();
+        items
+            .iter()
+            .enumerate()
+            .filter_map(|(index, item)| {
+                pattern
+                    .score(Utf32Str::new(&item.search_text, &mut buffer), &mut matcher)
+                    .map(|score| (index, score))
+            })
+            .collect()
+    };
+    matches.sort_unstable_by(|&(left_index, left_match), &(right_index, right_match)| {
+        let left = frecency.get(&items[left_index].value);
+        let right = frecency.get(&items[right_index].value);
+        match (left, right) {
+            (Some(left), Some(right)) => right.cmp(left),
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => Ordering::Equal,
+        }
+        .then_with(|| right_match.cmp(&left_match))
+        .then_with(|| left_index.cmp(&right_index))
+    });
     matches.into_iter().map(|(index, _)| index).collect()
 }
 
@@ -269,5 +293,51 @@ mod tests {
         let rendered = render_item(&source_item(), &config, 0);
 
         assert_eq!(rendered.rows[0].segments[1].fg.as_deref(), Some("green"));
+    }
+
+    #[test]
+    fn frc_004_selected_entries_rank_by_frecency_and_exact_recency() {
+        let items = [
+            RenderedItem {
+                rows: Vec::new(),
+                search_text: "agent one".into(),
+                value: "one".into(),
+            },
+            RenderedItem {
+                rows: Vec::new(),
+                search_text: "agent two".into(),
+                value: "two".into(),
+            },
+            RenderedItem {
+                rows: Vec::new(),
+                search_text: "agent three".into(),
+                value: "three".into(),
+            },
+        ];
+        let scores = HashMap::from([
+            (
+                "one".into(),
+                FrecencyRank {
+                    score: 100,
+                    last_access: 10,
+                },
+            ),
+            (
+                "two".into(),
+                FrecencyRank {
+                    score: 100,
+                    last_access: 20,
+                },
+            ),
+        ]);
+
+        assert_eq!(
+            matching_indices_with_frecency(&items, "agent", &scores),
+            [1, 0, 2]
+        );
+        assert_eq!(
+            matching_indices_with_frecency(&items, "", &scores),
+            [1, 0, 2]
+        );
     }
 }

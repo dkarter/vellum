@@ -38,3 +38,16 @@ fn meta_002_spec_runner_resolves_all_file_scenarios() {
         "src_001\nsrc_002\nsrc_003\nsrc_004\nsrc_005\n"
     );
 }
+
+#[test]
+fn sch_003_global_configuration_has_a_dedicated_schema() {
+    let schema: Value = serde_json::from_str(
+        &fs::read_to_string("schemas/global.schema.json")
+            .expect("global schema should be readable"),
+    )
+    .expect("global schema should be valid JSON");
+    let example = fs::read_to_string("examples/global.toml").unwrap();
+
+    assert_eq!(schema["$ref"], "./vellum.schema.json");
+    assert!(example.starts_with("#:schema ../schemas/global.schema.json"));
+}

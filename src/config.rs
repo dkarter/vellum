@@ -14,9 +14,27 @@ pub struct Config {
     pub keybindings: Keybindings,
     #[serde(default)]
     pub input: InputConfig,
+    #[serde(default)]
+    pub frecency: FrecencyConfig,
     pub item: ItemConfig,
     #[serde(default)]
     pub theme: Theme,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct FrecencyConfig {
+    pub enabled: bool,
+    pub max_entries: usize,
+}
+
+impl Default for FrecencyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_entries: 1_000,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -319,6 +337,9 @@ impl Config {
     }
 
     fn validate(&self) -> Result<()> {
+        if self.frecency.max_entries == 0 {
+            bail!("frecency.max_entries must be greater than zero");
+        }
         match (&self.source.cmd, self.source.builtin) {
             (Some(cmd), None) if !cmd.trim().is_empty() => {}
             (None, Some(_)) => {}
@@ -536,5 +557,17 @@ mod tests {
 
         assert!(!config.keybindings.enabled);
         assert!(config.keybindings.down.0.is_empty());
+    }
+
+    #[test]
+    fn frc_005_frecency_settings_parse_and_layer() {
+        let global = "[frecency]\nenabled = false\nmax_entries = 25";
+        let palette = format!("{MINIMAL}\n[frecency]\nenabled = true");
+
+        let config = Config::parse_layered(Some(global), &palette).unwrap();
+
+        assert!(config.frecency.enabled);
+        assert_eq!(config.frecency.max_entries, 25);
+        assert_eq!(Config::parse(MINIMAL).unwrap().frecency.max_entries, 1_000);
     }
 }

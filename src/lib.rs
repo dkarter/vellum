@@ -1,6 +1,7 @@
 pub mod app;
 pub mod builtins;
 pub mod config;
+pub mod frecency;
 pub mod item;
 pub mod official;
 pub mod source;

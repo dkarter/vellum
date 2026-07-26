@@ -15,13 +15,14 @@ use crossterm::{
 use vellum::{
     app::{App, Outcome},
     config::Config,
+    frecency::Frecency,
     official, source, ui,
 };
 
 const REFRESH_POLL_RATE: Duration = Duration::from_millis(50);
 
 fn main() -> Result<()> {
-    let palette = match cli(env::args().skip(1))? {
+    let palette_request = match cli(env::args().skip(1))? {
         Cli::Run(palette) => palette,
         Cli::PalettesSync { overwrite } => {
             let root = config_root().context(
@@ -40,7 +41,8 @@ fn main() -> Result<()> {
         }
     };
     let config_root = config_root();
-    let palette_path = palette_path(&palette, config_root.as_deref())?;
+    let palette_path = palette_path(&palette_request, config_root.as_deref())?;
+    let palette_key = palette_identity(&palette_path);
     let palette = fs::read_to_string(&palette_path)
         .with_context(|| format!("failed to read palette {}", palette_path.display()))?;
     let global = match config_root.map(|root| root.join("config.toml")) {
@@ -56,12 +58,39 @@ fn main() -> Result<()> {
     };
     let config = Config::parse_layered(global.as_deref(), &palette)?;
     let source_items = source::run(&config.source)?;
-    let mut app = App::new(
+    let mut frecency = if config.frecency.enabled {
+        let root = data_root().context(
+            "HOME, XDG_DATA_HOME, and VELLUM_DATA are unset; cannot store frecency data",
+        )?;
+        match Frecency::load(&root, config.frecency.max_entries) {
+            Ok(frecency) => Some(frecency),
+            Err(error) => {
+                eprintln!("warning: frecency disabled: {error:#}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let frecency_scores = match frecency
+        .as_ref()
+        .map(|frecency| frecency.scores(&palette_key))
+        .transpose()
+    {
+        Ok(scores) => scores.unwrap_or_default(),
+        Err(error) => {
+            eprintln!("warning: frecency disabled: {error:#}");
+            frecency = None;
+            Default::default()
+        }
+    };
+    let mut app = App::new_with_frecency(
         source_items,
         config.item.clone(),
         config.keybindings.clone(),
         config.input.clone(),
         config.search.enabled,
+        frecency_scores,
     );
 
     let mut terminal = ratatui::try_init().context("failed to initialize terminal")?;
@@ -71,7 +100,17 @@ fn main() -> Result<()> {
     cursor_result?;
     let outcome = result?;
     if let Outcome::Accepted(value) = outcome {
+        if let Err(error) = record_selection(frecency.as_mut(), &palette_key, &value) {
+            eprintln!("warning: failed to record frecency: {error:#}");
+        }
         println!("{value}");
+    }
+    Ok(())
+}
+
+fn record_selection(frecency: Option<&mut Frecency>, palette: &str, value: &str) -> Result<()> {
+    if let Some(frecency) = frecency {
+        frecency.record(palette, value)?;
     }
     Ok(())
 }
@@ -220,6 +259,32 @@ fn config_root() -> Option<PathBuf> {
     env::var_os("HOME").map(|home| PathBuf::from(home).join(".config/vellum"))
 }
 
+fn data_root() -> Option<PathBuf> {
+    data_root_from(
+        env::var_os("VELLUM_DATA").map(PathBuf::from),
+        env::var_os("XDG_DATA_HOME").map(PathBuf::from),
+        env::var_os("HOME").map(PathBuf::from),
+    )
+}
+
+fn data_root_from(
+    vellum_data: Option<PathBuf>,
+    xdg_data_home: Option<PathBuf>,
+    home: Option<PathBuf>,
+) -> Option<PathBuf> {
+    vellum_data
+        .filter(|root| root.is_absolute() && !root.as_os_str().is_empty())
+        .or_else(|| {
+            xdg_data_home
+                .filter(|root| root.is_absolute() && !root.as_os_str().is_empty())
+                .map(|root| root.join("vellum"))
+        })
+        .or_else(|| {
+            home.filter(|root| root.is_absolute() && !root.as_os_str().is_empty())
+                .map(|root| root.join(".local/share/vellum"))
+        })
+}
+
 fn palette_path(palette: &str, config_root: Option<&std::path::Path>) -> Result<PathBuf> {
     let path = std::path::Path::new(palette);
     if path.components().count() > 1 || path.extension().is_some() {
@@ -231,6 +296,13 @@ fn palette_path(palette: &str, config_root: Option<&std::path::Path>) -> Result<
             .join(palette)
             .with_extension("toml"))
     }
+}
+
+fn palette_identity(path: &std::path::Path) -> String {
+    fs::canonicalize(path)
+        .unwrap_or_else(|_| path.to_owned())
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn print_help() {
@@ -314,5 +386,56 @@ mod tests {
             cli(["palettes".into(), "sync".into(), "--overwrite".into()].into_iter()).unwrap(),
             Cli::PalettesSync { overwrite: true }
         );
+    }
+
+    #[test]
+    fn frc_006_data_root_honors_environment_precedence() {
+        assert_eq!(
+            data_root_from(
+                Some("/custom/vellum".into()),
+                Some("/xdg".into()),
+                Some("/home/user".into())
+            ),
+            Some("/custom/vellum".into())
+        );
+        assert_eq!(
+            data_root_from(None, Some("/xdg".into()), Some("/home/user".into())),
+            Some("/xdg/vellum".into())
+        );
+        assert_eq!(
+            data_root_from(None, None, Some("/home/user".into())),
+            Some("/home/user/.local/share/vellum".into())
+        );
+        assert_eq!(
+            data_root_from(None, Some("relative".into()), Some("/home/user".into())),
+            Some("/home/user/.local/share/vellum".into())
+        );
+    }
+
+    #[test]
+    fn frc_007_accepted_value_is_recorded_before_output() {
+        let root =
+            std::env::temp_dir().join(format!("vellum-main-frecency-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let mut frecency = Frecency::load(&root, 100).unwrap();
+
+        record_selection(Some(&mut frecency), "agents", "w1:p1").unwrap();
+
+        let loaded = Frecency::load(&root, 100).unwrap();
+        assert!(loaded.scores("agents").unwrap().contains_key("w1:p1"));
+        drop(loaded);
+        drop(frecency);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn frc_009_palette_identity_uses_resolved_canonical_path() {
+        let current = std::env::current_dir().unwrap();
+
+        assert_eq!(
+            palette_identity(std::path::Path::new(".")),
+            current.to_string_lossy()
+        );
+        assert_eq!(palette_identity(&current), current.to_string_lossy());
     }
 }

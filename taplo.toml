@@ -3,3 +3,9 @@ include = ["examples/*.toml", "palettes/*.toml"]
 
 [rule.schema]
 path = "schemas/vellum.schema.json"
+
+[[rule]]
+include = ["examples/global.toml"]
+
+[rule.schema]
+path = "schemas/global.schema.json"

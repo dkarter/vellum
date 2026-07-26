@@ -1,8 +1,12 @@
-#:schema ../schemas/vellum.schema.json
+#:schema ../schemas/global.schema.json
 
 [input]
 vim = true
 start_mode = "insert"
+
+[frecency]
+enabled = true
+max_entries = 1000
 
 [keybindings]
 enabled = true
