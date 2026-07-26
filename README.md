@@ -15,6 +15,14 @@ it too.
 
 ## Install
 
+Install a prebuilt release with mise:
+
+```sh
+mise use --global github:dkarter/vellum
+```
+
+Or build from source:
+
 Rust 1.88 or newer is required.
 
 ```sh
