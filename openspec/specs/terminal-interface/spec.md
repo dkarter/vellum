@@ -63,3 +63,13 @@ Vellum SHALL show the active Vim mode as a colored badge at the left of the foot
 - GIVEN palettes with Vim input enabled and disabled
 - WHEN each terminal frame is drawn
 - THEN the enabled frame shows a mode-colored footer badge and the disabled frame shows no mode badge
+
+### Requirement: Respond to terminal resizing
+
+Vellum SHALL redraw its interface when the terminal reports a new size.
+
+#### Scenario: Resize event requests a redraw {#UI-008}
+
+- GIVEN a running Vellum interface
+- WHEN Crossterm reports a terminal resize event
+- THEN Vellum marks the frame dirty so the next draw uses the new terminal area

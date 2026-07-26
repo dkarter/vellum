@@ -20,6 +20,7 @@ use vellum::{
 };
 
 const REFRESH_POLL_RATE: Duration = Duration::from_millis(50);
+const MAX_EVENTS_PER_TICK: usize = 64;
 
 fn main() -> Result<()> {
     let palette_request = match cli(env::args().skip(1))? {
@@ -141,12 +142,13 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App, config: &Config) 
             last_refresh,
             refresh_result.is_some(),
         );
-        if event::poll(timeout)?
-            && let Event::Key(key) = event::read()?
-            && key.kind == KeyEventKind::Press
-        {
-            app.handle_key(key);
-            dirty = true;
+        if event::poll(timeout)? {
+            for _ in 0..MAX_EVENTS_PER_TICK {
+                dirty |= handle_terminal_event(app, event::read()?);
+                if app.outcome != Outcome::Running || !event::poll(Duration::ZERO)? {
+                    break;
+                }
+            }
         }
 
         if app.outcome != Outcome::Running {
@@ -171,6 +173,17 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App, config: &Config) 
             refresh_result = Some(spawn_refresh(config.source.clone()));
             last_refresh = Instant::now();
         }
+    }
+}
+
+fn handle_terminal_event(app: &mut App, event: Event) -> bool {
+    match event {
+        Event::Key(key) if key.kind == KeyEventKind::Press => {
+            app.handle_key(key);
+            true
+        }
+        Event::Resize(_, _) => true,
+        _ => false,
     }
 }
 
@@ -374,6 +387,24 @@ mod tests {
             cursor_style(vellum::config::InputMode::Normal),
             SetCursorStyle::SteadyBlock
         );
+    }
+
+    #[test]
+    fn ui_008_resize_event_requests_a_redraw() {
+        let config = Config::parse(
+            "[source]\ncmd = 'unused'\n[item]\ntemplate = [['$name']]\nvalue = '$id'",
+        )
+        .unwrap();
+        let mut app = App::new(
+            Vec::new(),
+            config.item,
+            config.keybindings,
+            config.input,
+            true,
+        );
+
+        assert!(handle_terminal_event(&mut app, Event::Resize(120, 40)));
+        assert!(!handle_terminal_event(&mut app, Event::FocusGained));
     }
 
     #[test]
