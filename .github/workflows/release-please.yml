@@ -89,6 +89,17 @@ jobs:
         if: ${{ matrix.os == 'linux' }}
         run: sudo apt-get update && sudo apt-get install --yes musl-tools
 
+      - name: Cache cargo dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ matrix.target }}-
+
       - name: Build release binary
         run: cargo +1.97.1 build --locked --release --target ${{ matrix.target }}
 
@@ -133,5 +144,6 @@ jobs:
       - name: Publish release after all assets are uploaded
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
         run: gh release edit "${TAG_NAME}" --draft=false
