@@ -41,7 +41,6 @@ jobs:
         with:
           # App-authored release PRs can trigger the CI workflow.
           token: ${{ steps.release_app_token.outputs.token }}
-          skip-labeling: true
 
   build-release:
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
