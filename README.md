@@ -1,7 +1,7 @@
 <p align="center">
   <img width="200" src="https://private-user-images.githubusercontent.com/551858/626896706-90c255f3-d30b-4121-9cb8-a527b078ed49.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3ODUxMjI4MDIsIm5iZiI6MTc4NTEyMjUwMiwicGF0aCI6Ii81NTE4NTgvNjI2ODk2NzA2LTkwYzI1NWYzLWQzMGItNDEyMS05Y2I4LWE1MjdiMDc4ZWQ0OS5wbmc_WC1BbXotQWxnb3JpdGhtPUFXUzQtSE1BQy1TSEEyNTYmWC1BbXotQ3JlZGVudGlhbD1BS0lBVkNPRFlMU0E1M1BRSzRaQSUyRjIwMjYwNzI3JTJGdXMtZWFzdC0xJTJGczMlMkZhd3M0X3JlcXVlc3QmWC1BbXotRGF0ZT0yMDI2MDcyN1QwMzIxNDJaJlgtQW16LUV4cGlyZXM9MzAwJlgtQW16LVNpZ25hdHVyZT1jN2JjNTliNmFhNzEzZjFlMDc2NTUwOWFmNDE4NjUyNmY4N2FkM2JmY2U2MDgwMzE2OGE3ZjE1MzcwYTkwYzM1JlgtQW16LVNpZ25lZEhlYWRlcnM9aG9zdCZyZXNwb25zZS1jb250ZW50LXR5cGU9aW1hZ2UlMkZwbmcifQ.YDsE_Qsg4DPYWC98nwNyUIaLsmVSEp9jsoy4gn67EUA" />
   <br />
-  <em>Vellum</em>
+  <strong><em>Vellum</em></strong>
 </p>
 
 Vellum is a fast, customizable menu for terminal multiplexers. Use it as a
