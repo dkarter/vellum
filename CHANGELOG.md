@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/dkarter/vellum/compare/v0.4.0...v0.4.1) (2026-07-27)
+
+
+### Bug Fixes
+
+* publish releases via GH_REPO and speed up Rust CI with mise + caching ([6566616](https://github.com/dkarter/vellum/commit/6566616c5bee177517a52518609c103a489d8aed))
+
 ## [0.4.0](https://github.com/dkarter/vellum/compare/v0.3.0...v0.4.0) (2026-07-27)
 
 
