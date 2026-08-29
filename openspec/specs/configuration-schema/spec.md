@@ -48,4 +48,4 @@ Vellum SHALL configure Taplo to use the bundled schema for example TOML files.
 
 - GIVEN the shared configuration option schema
 - WHEN its action definitions are inspected
-- THEN it describes default and menu controls, named argv or shell commands, interpolated working directories, direct bindings, icons, descriptions, availability conditions, and success behavior
+- THEN it describes default and menu controls, named argv or shell commands, interpolated working directories, direct bindings, icons, descriptions, field and cached command availability conditions, and success behavior

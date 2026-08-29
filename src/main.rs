@@ -186,6 +186,7 @@ fn run(terminal: &mut Tui, app: &mut App, config: &Config) -> Result<Outcome> {
     let mut last_animation = Instant::now();
     let mut last_refresh = Instant::now();
     let mut refresh_result: Option<Receiver<Result<Vec<source::SourceItem>>>> = None;
+    let mut availability_results: Vec<Receiver<(action::AvailabilityCommand, bool)>> = Vec::new();
     let refresh_interval = Duration::from_millis(config.source.refresh_ms);
     let animation_interval = app.animation_interval();
     let mut dirty = true;
@@ -205,13 +206,18 @@ fn run(terminal: &mut Tui, app: &mut App, config: &Config) -> Result<Outcome> {
             dirty = false;
         }
 
-        let timeout = next_timeout(
-            animation_interval,
-            last_animation,
-            refresh_interval,
-            last_refresh,
-            refresh_result.is_some(),
-        );
+        let timeout = if app.outcome == Outcome::Running {
+            next_timeout(
+                animation_interval,
+                last_animation,
+                refresh_interval,
+                last_refresh,
+                refresh_result.is_some() || !availability_results.is_empty(),
+                app.availability_refresh_in(),
+            )
+        } else {
+            Duration::ZERO
+        };
         if event::poll(timeout)? {
             for _ in 0..MAX_EVENTS_PER_TICK {
                 dirty |= handle_terminal_event(app, event::read()?);
@@ -224,6 +230,8 @@ fn run(terminal: &mut Tui, app: &mut App, config: &Config) -> Result<Outcome> {
         if let Outcome::ActionRequested(index) = app.outcome {
             dirty = true;
             refresh_result = None;
+            availability_results.clear();
+            app.invalidate_availability();
             let action = &config.actions.items[index];
             let item = app
                 .selected_source_item()
@@ -259,6 +267,18 @@ fn run(terminal: &mut Tui, app: &mut App, config: &Config) -> Result<Outcome> {
             dirty |= app.replace_source(result?, elapsed_ms);
             refresh_result = None;
         }
+        let completed_availability = receive_availability(&mut availability_results)?;
+        if !completed_availability.is_empty() {
+            for (check, available) in completed_availability {
+                app.finish_availability_check(check, available);
+            }
+            dirty = true;
+        }
+        availability_results.extend(
+            app.take_availability_checks()
+                .into_iter()
+                .map(spawn_availability_check),
+        );
         if !refresh_interval.is_zero()
             && refresh_result.is_none()
             && last_refresh.elapsed() >= refresh_interval
@@ -298,6 +318,7 @@ fn next_timeout(
     refresh_interval: Duration,
     last_refresh: Instant,
     refresh_pending: bool,
+    availability_refresh_in: Option<Duration>,
 ) -> Duration {
     let mut timeout = Duration::from_secs(3_600);
     if let Some(interval) = animation_interval {
@@ -308,6 +329,9 @@ fn next_timeout(
     }
     if refresh_pending {
         timeout = timeout.min(REFRESH_POLL_RATE);
+    }
+    if let Some(refresh_in) = availability_refresh_in {
+        timeout = timeout.min(refresh_in);
     }
     timeout
 }
@@ -330,6 +354,37 @@ fn receive_refresh(
         Some(Err(TryRecvError::Disconnected)) => bail!("source refresh worker disconnected"),
         Some(Err(TryRecvError::Empty)) | None => Ok(None),
     }
+}
+
+fn spawn_availability_check(
+    check: action::AvailabilityCommand,
+) -> Receiver<(action::AvailabilityCommand, bool)> {
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let available = action::check_availability(&check);
+        let _ = sender.send((check, available));
+    });
+    receiver
+}
+
+fn receive_availability(
+    receivers: &mut Vec<Receiver<(action::AvailabilityCommand, bool)>>,
+) -> Result<Vec<(action::AvailabilityCommand, bool)>> {
+    let mut completed = Vec::new();
+    let mut index = 0;
+    while index < receivers.len() {
+        match receivers[index].try_recv() {
+            Ok(result) => {
+                completed.push(result);
+                receivers.swap_remove(index);
+            }
+            Err(TryRecvError::Disconnected) => {
+                bail!("action availability worker disconnected")
+            }
+            Err(TryRecvError::Empty) => index += 1,
+        }
+    }
+    Ok(completed)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -433,6 +488,23 @@ fn print_sync_report(report: &official::SyncReport) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn act_011_availability_checks_run_on_a_background_worker() {
+        let availability = vellum::config::ActionAvailability {
+            command: vec!["true".into()],
+            cwd: None,
+            cache_ms: 30_000,
+            timeout_ms: 5_000,
+        };
+        let check = action::prepare_availability(&availability, &Default::default()).unwrap();
+
+        let result = spawn_availability_check(check)
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap();
+
+        assert!(result.1);
+    }
 
     #[test]
     fn cli_001_explicit_config_path_wins() {

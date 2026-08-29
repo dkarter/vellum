@@ -79,7 +79,8 @@ filetype icon map adapted from Snacks.nvim's `nvim-web-devicons` fallback.
 
 The workspace palette focuses on Enter. Ctrl-A opens its action menu. A selected
 HWT worktree can be removed and the choices refreshed without leaving Vellum,
-or opened on GitHub at its repository, pull request, or pull-request checks:
+or opened on GitHub at its repository, pull request, or pull-request checks. The
+pull-request actions appear only when the worktree branch has a pull request:
 
 ```sh
 vellum herdr-workspaces
@@ -317,6 +318,22 @@ when = [
   { field = "worktree", is_set = true },
 ]
 ```
+
+Set `availability` to gate an action on a side-effect-free argv command. Vellum
+opens the menu immediately, runs uncached probes on a background thread, and
+keeps the action hidden until the probe exits successfully. Probe stdin, stdout,
+and stderr are disconnected. Equivalent interpolated commands, working
+directories, and timeout policies share both successful and unsuccessful results
+for `cache_ms`, which defaults to 30 seconds. Probes are terminated after
+`timeout_ms`, which defaults to five seconds:
+
+```toml
+availability = { command = ["gh", "pr", "view", "--json", "number"], cwd = "$checkout_path", cache_ms = 30000, timeout_ms = 5000 }
+```
+
+Probe commands and working directories use the same whole-field interpolation
+and direct process execution as argv actions. Invalid interpolation and nonzero
+exit statuses leave the action unavailable without closing Vellum.
 
 Set `actions.default` to make the normal accept binding run that named action.
 Without a default action, Enter keeps the original output-only behavior and

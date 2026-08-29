@@ -150,7 +150,7 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
             ));
         }
         if config.keybindings.enabled
-            && app.has_available_actions()
+            && app.has_potential_actions()
             && !config.actions.menu.is_empty()
         {
             text.push_str(&format!("  {} actions", config.actions.menu.label()));
@@ -206,7 +206,7 @@ fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) {
             let heading = if action.icon.is_empty() {
                 action.label.clone()
             } else {
-                format!("{}  {}", action.icon, action.label)
+                format!("{} {}", action.icon, action.label)
             };
             Line::from(heading)
                 .width()
@@ -275,7 +275,7 @@ fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) {
             let mut heading = Vec::new();
             if !action.icon.is_empty() {
                 heading.push(Span::styled(
-                    format!("{}  ", action.icon),
+                    format!("{} ", action.icon),
                     Style::new().add_modifier(Modifier::BOLD),
                 ));
             }
@@ -299,9 +299,13 @@ fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) {
         });
     if matching.is_empty() {
         frame.render_widget(
-            Paragraph::new("No matching actions")
-                .style(Style::new().fg(color(&config.theme.border)))
-                .block(Block::new().padding(Padding::horizontal(2))),
+            Paragraph::new(if app.has_pending_actions() {
+                "Checking actions..."
+            } else {
+                "No matching actions"
+            })
+            .style(Style::new().fg(color(&config.theme.border)))
+            .block(Block::new().padding(Padding::horizontal(2))),
             list_area,
         );
         return;
@@ -832,9 +836,9 @@ mod tests {
             .collect();
         assert!(output.contains("Actions"), "{output}");
         assert!(output.contains("Filter actions..."), "{output}");
-        assert!(output.contains("R  Refresh source"), "{output}");
+        assert!(output.contains("R Refresh source"), "{output}");
         assert!(output.contains("Rerun the source"), "{output}");
-        assert!(output.contains("!  Show an error"), "{output}");
+        assert!(output.contains("! Show an error"), "{output}");
 
         for character in "failure".chars() {
             app.handle_key(crossterm::event::KeyEvent::from(

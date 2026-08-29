@@ -49,6 +49,7 @@ icon = ""
 description = "Open the pull request for this worktree branch"
 command = ["gh", "pr", "view", "--web"]
 cwd = "$checkout_path"
+availability = { command = ["gh", "pr", "view", "--json", "number"], cwd = "$checkout_path", cache_ms = 30000 }
 when = [{ field = "worktree", is_set = true }]
 on_success = "exit"
 
@@ -59,6 +60,7 @@ icon = "󰙨"
 description = "Open GitHub Actions checks for this pull request"
 command = ["gh", "pr", "checks", "--web"]
 cwd = "$checkout_path"
+availability = { command = ["gh", "pr", "view", "--json", "number"], cwd = "$checkout_path", cache_ms = 30000 }
 when = [{ field = "worktree", is_set = true }]
 on_success = "exit"
 

@@ -8,7 +8,7 @@ Run explicit palette commands for selected items without compromising selection 
 
 ### Requirement: Configure safe selection actions
 
-Vellum SHALL support named actions with argv-array commands, selected-item field interpolation, optional explicit shell commands, keybindings, selected-field availability conditions, and exit or refresh success behavior.
+Vellum SHALL support named actions with argv-array commands, selected-item field interpolation, optional explicit shell commands, keybindings, selected-field and command availability conditions, and exit or refresh success behavior.
 
 #### Scenario: Action configuration parses and validates {#ACT-001}
 
@@ -53,6 +53,20 @@ Vellum SHALL show a padded in-process menu of actions for the selected item, inc
 - WHEN the user types a fuzzy query in the action menu
 - THEN actions are filtered and ranked by their textual metadata
 - AND arrow keys, Ctrl-N, and Ctrl-P continue to navigate the filtered actions
+- AND each configured icon is separated from its label by one space
+
+### Requirement: Resolve command-gated availability without blocking input
+
+Vellum SHALL resolve optional argv command availability probes outside the input and rendering paths, treat only a zero exit status as available, and cache equivalent probe results for the configured duration.
+
+#### Scenario: Command-gated actions resolve asynchronously and share cached results {#ACT-011}
+
+- GIVEN actions with equivalent availability commands and interpolated working directories
+- WHEN the action menu opens before an uncached probe completes
+- THEN the menu opens immediately while those actions remain hidden
+- AND a zero exit status makes the actions available while a nonzero status leaves them hidden
+- AND equivalent probes reuse the cached result until its configured duration expires
+- AND a probe that exceeds its configured timeout is terminated without blocking input or other probes
 
 ### Requirement: Execute actions safely
 

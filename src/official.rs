@@ -439,6 +439,18 @@ mod tests {
             assert_eq!(action.command.as_deref().unwrap(), command);
             assert_eq!(action.cwd.as_deref(), Some("$checkout_path"));
             assert!(action.is_available(&item));
+            if name == "open-repository" {
+                assert!(action.availability.is_none());
+            } else {
+                let availability = action.availability.as_ref().unwrap();
+                assert_eq!(
+                    availability.command,
+                    ["gh", "pr", "view", "--json", "number"]
+                );
+                assert_eq!(availability.cwd.as_deref(), Some("$checkout_path"));
+                assert_eq!(availability.cache_ms, 30_000);
+                assert_eq!(availability.timeout_ms, 5_000);
+            }
         }
     }
 

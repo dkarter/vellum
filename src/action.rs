@@ -1,9 +1,24 @@
-use std::process::{Command, Stdio};
+use std::{
+    process::{Command, Stdio},
+    thread,
+    time::{Duration, Instant},
+};
 
 use anyhow::{Result, bail};
 use serde_json::{Map, Value};
 
-use crate::{config::ActionConfig, item::field_value, source::ensure_success};
+use crate::{
+    config::{ActionAvailability, ActionConfig},
+    item::field_value,
+    source::ensure_success,
+};
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AvailabilityCommand {
+    argv: Vec<String>,
+    cwd: Option<String>,
+    timeout_ms: u64,
+}
 
 pub fn run(action: &ActionConfig, item: &Map<String, Value>) -> Result<()> {
     let label = format!("action '{}'", action.name);
@@ -26,6 +41,62 @@ pub fn run(action: &ActionConfig, item: &Map<String, Value>) -> Result<()> {
     command.stdout(Stdio::null());
     let output = crate::source::run_command(&mut command, &label)?;
     ensure_success(&label, &output)
+}
+
+pub fn prepare_availability(
+    availability: &ActionAvailability,
+    item: &Map<String, Value>,
+) -> Result<AvailabilityCommand> {
+    let argv = interpolate(&availability.command, item)?;
+    if argv.is_empty() || argv[0].trim().is_empty() {
+        bail!("action availability command cannot be empty");
+    }
+    Ok(AvailabilityCommand {
+        argv,
+        cwd: availability
+            .cwd
+            .as_deref()
+            .map(|cwd| interpolate_argument(cwd, item))
+            .transpose()?,
+        timeout_ms: availability.timeout_ms,
+    })
+}
+
+pub fn check_availability(check: &AvailabilityCommand) -> bool {
+    let mut command = Command::new(&check.argv[0]);
+    command
+        .args(&check.argv[1..])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    if let Some(cwd) = &check.cwd {
+        command.current_dir(cwd);
+    }
+    let Ok(mut child) = command.spawn() else {
+        return false;
+    };
+    let timeout = Duration::from_millis(check.timeout_ms);
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return status.success(),
+            Ok(None) if started.elapsed() < timeout => {
+                thread::sleep(
+                    Duration::from_millis(10).min(timeout.saturating_sub(started.elapsed())),
+                );
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return false;
+            }
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return false;
+            }
+        }
+    }
 }
 
 fn interpolate(argv: &[String], item: &Map<String, Value>) -> Result<Vec<String>> {
@@ -66,7 +137,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::config::{Bindings, OnSuccess};
+    use crate::config::{ActionAvailability, Bindings, OnSuccess};
 
     fn action(command: Vec<&str>) -> ActionConfig {
         ActionConfig {
@@ -78,6 +149,7 @@ mod tests {
             command: Some(command.into_iter().map(str::to_owned).collect()),
             shell: None,
             cwd: None,
+            availability: None,
             when: Vec::new(),
             on_success: OnSuccess::Exit,
         }
@@ -147,5 +219,34 @@ mod tests {
             assert!(!spawned.exists());
         }
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn act_011_availability_uses_interpolated_argv_cwd_and_exit_status() {
+        let item = json!({"checkout_path": std::env::temp_dir()})
+            .as_object()
+            .unwrap()
+            .clone();
+        let mut availability = ActionAvailability {
+            command: vec!["true".into()],
+            cwd: Some("$checkout_path".into()),
+            cache_ms: 30_000,
+            timeout_ms: 5_000,
+        };
+
+        assert!(check_availability(
+            &prepare_availability(&availability, &item).unwrap()
+        ));
+        availability.command = vec!["false".into()];
+        assert!(!check_availability(
+            &prepare_availability(&availability, &item).unwrap()
+        ));
+        availability.command = vec!["sleep".into(), "1".into()];
+        availability.timeout_ms = 10;
+        let started = Instant::now();
+        assert!(!check_availability(
+            &prepare_availability(&availability, &item).unwrap()
+        ));
+        assert!(started.elapsed() < Duration::from_secs(1));
     }
 }

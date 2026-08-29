@@ -231,6 +231,7 @@
           "type": "string",
           "minLength": 1
         },
+        "availability": { "$ref": "#/$defs/action-availability" },
         "when": {
           "description": "Conditions that must all match the selected item before this action is available.",
           "type": "array",
@@ -260,6 +261,37 @@
         { "required": ["equals"], "not": { "required": ["is_set"] } },
         { "required": ["is_set"], "not": { "required": ["equals"] } }
       ]
+    },
+    "action-availability": {
+      "description": "Asynchronous command probe that gates action availability. A zero exit status makes the action available, and equivalent interpolated commands, working directories, and timeout policies share cached results.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command"],
+      "properties": {
+        "command": {
+          "description": "Argv array executed directly with stdin, stdout, and stderr disconnected.",
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "cwd": {
+          "description": "Working directory for the probe. A value consisting of $field or $nested.field is replaced with one selected scalar field.",
+          "type": "string",
+          "minLength": 1
+        },
+        "cache_ms": {
+          "description": "Duration in milliseconds to reuse successful or unsuccessful results for an equivalent interpolated command and working directory.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 30000
+        },
+        "timeout_ms": {
+          "description": "Maximum probe runtime in milliseconds before the process is terminated and treated as unavailable.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 5000
+        }
+      }
     },
     "segment": {
       "oneOf": [

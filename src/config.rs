@@ -70,9 +70,31 @@ pub struct ActionConfig {
     #[serde(default)]
     pub cwd: Option<String>,
     #[serde(default)]
+    pub availability: Option<ActionAvailability>,
+    #[serde(default)]
     pub when: Vec<ActionCondition>,
     #[serde(default)]
     pub on_success: OnSuccess,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ActionAvailability {
+    pub command: Vec<String>,
+    #[serde(default)]
+    pub cwd: Option<String>,
+    #[serde(default = "default_availability_cache_ms")]
+    pub cache_ms: u64,
+    #[serde(default = "default_availability_timeout_ms")]
+    pub timeout_ms: u64,
+}
+
+const fn default_availability_cache_ms() -> u64 {
+    30_000
+}
+
+const fn default_availability_timeout_ms() -> u64 {
+    5_000
 }
 
 impl ActionConfig {
@@ -551,6 +573,33 @@ impl Config {
             if action.cwd.as_ref().is_some_and(|cwd| cwd.trim().is_empty()) {
                 bail!("action '{}' cwd cannot be empty", action.name);
             }
+            if let Some(availability) = &action.availability {
+                if availability.command.is_empty() || availability.command[0].trim().is_empty() {
+                    bail!(
+                        "action '{}' availability command cannot be empty",
+                        action.name
+                    );
+                }
+                if availability
+                    .cwd
+                    .as_ref()
+                    .is_some_and(|cwd| cwd.trim().is_empty())
+                {
+                    bail!("action '{}' availability cwd cannot be empty", action.name);
+                }
+                if availability.cache_ms == 0 {
+                    bail!(
+                        "action '{}' availability cache_ms must be positive",
+                        action.name
+                    );
+                }
+                if availability.timeout_ms == 0 {
+                    bail!(
+                        "action '{}' availability timeout_ms must be positive",
+                        action.name
+                    );
+                }
+            }
             if action
                 .key
                 .contains_key(KeyCode::Char('c'), KeyModifiers::CONTROL)
@@ -962,6 +1011,7 @@ mod tests {
             key = "ctrl-r"
             command = ["herdr", "workspace", "focus", "$id"]
             cwd = "$checkout_path"
+            availability = { command = ["test", "-d", "$checkout_path"], cwd = "$checkout_path", cache_ms = 5000, timeout_ms = 2000 }
             when = [{ field = "focused", equals = false }]
 
             [[actions.items]]
@@ -985,6 +1035,11 @@ mod tests {
             config.actions.items[0].cwd.as_deref(),
             Some("$checkout_path")
         );
+        let availability = config.actions.items[0].availability.as_ref().unwrap();
+        assert_eq!(availability.command[2], "$checkout_path");
+        assert_eq!(availability.cwd.as_deref(), Some("$checkout_path"));
+        assert_eq!(availability.cache_ms, 5_000);
+        assert_eq!(availability.timeout_ms, 2_000);
         assert_eq!(config.actions.items[0].when[0].equals, Some(false.into()));
         assert_eq!(config.actions.items[1].on_success, OnSuccess::Refresh);
         let available = serde_json::json!({"focused": false})

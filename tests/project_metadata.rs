@@ -117,6 +117,18 @@ fn sch_006_shared_schema_describes_native_actions() {
     assert!(action["properties"]["command"].is_object());
     assert!(action["properties"]["shell"].is_object());
     assert!(action["properties"]["cwd"].is_object());
+    assert_eq!(
+        action["properties"]["availability"]["$ref"],
+        "#/$defs/action-availability"
+    );
+    assert_eq!(
+        shared["$defs"]["action-availability"]["properties"]["cache_ms"]["default"],
+        30_000
+    );
+    assert_eq!(
+        shared["$defs"]["action-availability"]["properties"]["timeout_ms"]["default"],
+        5_000
+    );
     assert_eq!(action["properties"]["icon"]["default"], "");
     assert_eq!(action["properties"]["description"]["default"], "");
     assert_eq!(

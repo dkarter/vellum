@@ -1,10 +1,14 @@
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    time::{Duration, Instant},
+};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use nucleo_matcher::{Config as MatcherConfig, Matcher, Utf32Str, pattern::Pattern};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
+    action::{AvailabilityCommand, prepare_availability},
     config::{
         ActionsConfig, Bindings, FilterChoice, FilterConfig, InputConfig, InputMode, ItemConfig,
         Keybindings,
@@ -13,6 +17,19 @@ use crate::{
     item::{RenderedItem, field_value_at, matching_indices_with_frecency_by, render_items},
     source::SourceItem,
 };
+
+#[derive(Debug)]
+struct CachedAvailability {
+    available: bool,
+    checked_at: Instant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ActionAvailabilityState {
+    Available,
+    Pending,
+    Unavailable,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
@@ -30,6 +47,10 @@ pub struct App {
     filter_config: FilterConfig,
     input_config: InputConfig,
     action_config: ActionsConfig,
+    availability_cache: HashMap<AvailabilityCommand, CachedAvailability>,
+    availability_in_flight: HashSet<AvailabilityCommand>,
+    availability_queue: Vec<AvailabilityCommand>,
+    pending_action: Option<(usize, SourceItem)>,
     search_enabled: bool,
     source_items: Vec<SourceItem>,
     frecency_scores: HashMap<String, FrecencyRank>,
@@ -107,6 +128,10 @@ impl App {
             keybindings,
             filter_config,
             action_config,
+            availability_cache: HashMap::new(),
+            availability_in_flight: HashSet::new(),
+            availability_queue: Vec::new(),
+            pending_action: None,
             search_enabled,
             source_items,
             frecency_scores,
@@ -190,7 +215,9 @@ impl App {
                 .items
                 .iter()
                 .enumerate()
-                .find(|(index, action)| action.key.matches(key) && self.action_available(*index))
+                .find(|(index, action)| {
+                    action.key.matches(key) && self.action_statically_available(*index)
+                })
                 .map(|(index, _)| index)
         {
             self.request_action(index);
@@ -201,10 +228,11 @@ impl App {
             return;
         }
         if self.keybindings.enabled && self.action_config.menu.matches(key) {
-            let available_actions = self.available_action_indices();
-            if available_actions.is_empty() {
+            if !self.has_potential_actions() {
                 return;
             }
+            self.queue_availability_checks();
+            let available_actions = self.available_action_indices();
             self.action_selected = self
                 .action_config
                 .default_index()
@@ -298,6 +326,10 @@ impl App {
                 self.action_selected = 0;
             } else if let Some(position) = restored_action {
                 self.action_selected = position;
+            } else if selected_action.is_some_and(|index| {
+                self.action_availability(index) == ActionAvailabilityState::Pending
+            }) {
+                self.action_selected = self.action_selected.min(matching.len().saturating_sub(1));
             } else {
                 self.action_menu = false;
             }
@@ -322,21 +354,106 @@ impl App {
         self.status = error;
     }
 
+    pub fn take_availability_checks(&mut self) -> Vec<AvailabilityCommand> {
+        if self.action_menu || self.pending_action.is_some() {
+            self.queue_availability_checks();
+        }
+        std::mem::take(&mut self.availability_queue)
+    }
+
+    pub fn finish_availability_check(&mut self, check: AvailabilityCommand, available: bool) {
+        let selected_action = self
+            .action_menu
+            .then(|| {
+                self.matching_action_indices()
+                    .get(self.action_selected)
+                    .copied()
+            })
+            .flatten();
+        self.availability_in_flight.remove(&check);
+        self.availability_cache.insert(
+            check,
+            CachedAvailability {
+                available,
+                checked_at: Instant::now(),
+            },
+        );
+        let matching = self.matching_action_indices();
+        self.action_selected = selected_action
+            .and_then(|index| matching.iter().position(|candidate| *candidate == index))
+            .unwrap_or_else(|| self.action_selected.min(matching.len().saturating_sub(1)));
+
+        if let Some((index, item)) = self.pending_action.clone() {
+            if self.selected_source_item() != Some(&item) {
+                self.pending_action = None;
+            } else {
+                match self.action_availability(index) {
+                    ActionAvailabilityState::Available => {
+                        self.pending_action = None;
+                        self.outcome = Outcome::ActionRequested(index);
+                    }
+                    ActionAvailabilityState::Unavailable => self.pending_action = None,
+                    ActionAvailabilityState::Pending => {}
+                }
+            }
+        }
+    }
+
+    pub fn invalidate_availability(&mut self) {
+        self.availability_cache.clear();
+        self.availability_in_flight.clear();
+        self.availability_queue.clear();
+        self.pending_action = None;
+    }
+
     pub fn available_action_indices(&self) -> Vec<usize> {
         self.action_config
             .items
             .iter()
             .enumerate()
-            .filter_map(|(index, _)| self.action_available(index).then_some(index))
+            .filter_map(|(index, _)| {
+                (self.action_availability(index) == ActionAvailabilityState::Available)
+                    .then_some(index)
+            })
             .collect()
     }
 
-    pub fn has_available_actions(&self) -> bool {
+    pub fn has_potential_actions(&self) -> bool {
         self.action_config
             .items
             .iter()
             .enumerate()
-            .any(|(index, _)| self.action_available(index))
+            .any(|(index, _)| {
+                self.action_availability(index) != ActionAvailabilityState::Unavailable
+            })
+    }
+
+    pub fn has_pending_actions(&self) -> bool {
+        self.action_config
+            .items
+            .iter()
+            .enumerate()
+            .any(|(index, _)| self.action_availability(index) == ActionAvailabilityState::Pending)
+    }
+
+    pub fn availability_refresh_in(&self) -> Option<Duration> {
+        self.action_menu.then_some(())?;
+        self.action_config
+            .items
+            .iter()
+            .filter_map(|action| {
+                let item = self.selected_source_item()?;
+                action.is_available(item).then_some(())?;
+                let availability = action.availability.as_ref()?;
+                let check = prepare_availability(availability, item).ok()?;
+                (!self.availability_in_flight.contains(&check)).then_some(())?;
+                let cached = self.availability_cache.get(&check)?;
+                Some(
+                    Duration::from_millis(availability.cache_ms)
+                        .saturating_sub(cached.checked_at.elapsed()),
+                )
+            })
+            .min()
     }
 
     pub fn matching_action_indices(&self) -> Vec<usize> {
@@ -422,17 +539,111 @@ impl App {
     }
 
     fn request_action(&mut self, index: usize) {
-        if self.action_available(index) {
-            self.outcome = Outcome::ActionRequested(index);
+        match self.action_availability(index) {
+            ActionAvailabilityState::Available => self.outcome = Outcome::ActionRequested(index),
+            ActionAvailabilityState::Pending => {
+                if let Some(item) = self.selected_source_item().cloned() {
+                    self.pending_action = Some((index, item));
+                    self.queue_availability_checks();
+                }
+            }
+            ActionAvailabilityState::Unavailable => {}
         }
     }
 
-    fn action_available(&self, index: usize) -> bool {
+    fn action_statically_available(&self, index: usize) -> bool {
         self.action_config
             .items
             .get(index)
             .zip(self.selected_source_item())
             .is_some_and(|(action, item)| action.is_available(item))
+    }
+
+    fn action_availability(&self, index: usize) -> ActionAvailabilityState {
+        let Some((action, item)) = self
+            .action_config
+            .items
+            .get(index)
+            .zip(self.selected_source_item())
+        else {
+            return ActionAvailabilityState::Unavailable;
+        };
+        if !action.is_available(item) {
+            return ActionAvailabilityState::Unavailable;
+        }
+        let Some(availability) = &action.availability else {
+            return ActionAvailabilityState::Available;
+        };
+        let Ok(check) = prepare_availability(availability, item) else {
+            return ActionAvailabilityState::Unavailable;
+        };
+        match self.cached_availability(&check, availability.cache_ms) {
+            Some(true) => ActionAvailabilityState::Available,
+            Some(false) => ActionAvailabilityState::Unavailable,
+            None => ActionAvailabilityState::Pending,
+        }
+    }
+
+    fn queue_availability_checks(&mut self) {
+        let active_checks = self
+            .selected_source_item()
+            .into_iter()
+            .flat_map(|item| {
+                self.action_config.items.iter().filter_map(|action| {
+                    action
+                        .is_available(item)
+                        .then_some(action.availability.as_ref())
+                        .flatten()
+                        .and_then(|availability| prepare_availability(availability, item).ok())
+                })
+            })
+            .collect::<HashSet<_>>();
+        while self.availability_cache.len() > 256 {
+            let Some(oldest) = self
+                .availability_cache
+                .iter()
+                .filter(|(check, _)| !active_checks.contains(*check))
+                .min_by_key(|(_, cached)| cached.checked_at)
+                .map(|(check, _)| check.clone())
+            else {
+                break;
+            };
+            self.availability_cache.remove(&oldest);
+        }
+        let checks = self
+            .selected_source_item()
+            .into_iter()
+            .flat_map(|item| {
+                self.action_config
+                    .items
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, action)| {
+                        (self.action_availability(index) == ActionAvailabilityState::Pending)
+                            .then_some(action.availability.as_ref())
+                            .flatten()
+                            .and_then(|availability| {
+                                prepare_availability(availability, item)
+                                    .ok()
+                                    .map(|check| (check, availability.cache_ms))
+                            })
+                    })
+            })
+            .collect::<Vec<_>>();
+        for (check, cache_ms) in checks {
+            if self.cached_availability(&check, cache_ms).is_none()
+                && self.availability_in_flight.insert(check.clone())
+            {
+                self.availability_queue.push(check);
+            }
+        }
+    }
+
+    fn cached_availability(&self, check: &AvailabilityCommand, cache_ms: u64) -> Option<bool> {
+        self.availability_cache.get(check).and_then(|cached| {
+            (cached.checked_at.elapsed() < Duration::from_millis(cache_ms))
+                .then_some(cached.available)
+        })
     }
 
     fn refilter(&mut self) {
@@ -741,6 +952,138 @@ mod tests {
         assert_eq!(app.action_selected, 0);
         app.handle_key(KeyEvent::from(KeyCode::Enter));
         assert_eq!(app.outcome, Outcome::ActionRequested(1));
+    }
+
+    #[test]
+    fn act_011_command_gated_actions_resolve_asynchronously_and_share_cached_results() {
+        let mut app = app();
+        app.action_config = toml::from_str(
+            r#"
+            menu = "ctrl-a"
+
+            [[items]]
+            name = "pr"
+            label = "Open PR"
+            command = ["true"]
+            availability = { command = ["test", "-n", "$id"], cache_ms = 30000 }
+
+            [[items]]
+            name = "checks"
+            label = "Open checks"
+            command = ["true"]
+            availability = { command = ["test", "-n", "$id"], cache_ms = 30000 }
+            "#,
+        )
+        .unwrap();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+
+        assert!(app.action_menu);
+        assert!(app.matching_action_indices().is_empty());
+        assert!(app.has_pending_actions());
+        let checks = app.take_availability_checks();
+        assert_eq!(checks.len(), 1);
+
+        app.finish_availability_check(checks[0].clone(), true);
+
+        assert_eq!(app.matching_action_indices(), [0, 1]);
+        assert!(!app.has_pending_actions());
+        app.action_menu = false;
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        assert!(app.take_availability_checks().is_empty());
+
+        app.availability_cache
+            .get_mut(&checks[0])
+            .unwrap()
+            .checked_at = Instant::now() - Duration::from_secs(31);
+        app.action_menu = false;
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        let checks = app.take_availability_checks();
+        assert_eq!(checks.len(), 1);
+        app.finish_availability_check(checks[0].clone(), false);
+        assert!(app.matching_action_indices().is_empty());
+        assert!(!app.has_potential_actions());
+    }
+
+    #[test]
+    fn act_011_async_results_preserve_the_highlighted_action() {
+        let mut app = app();
+        app.action_config = toml::from_str(
+            r#"
+            menu = "ctrl-a"
+
+            [[items]]
+            name = "gated"
+            label = "Gated"
+            command = ["true"]
+            availability = { command = ["true"] }
+
+            [[items]]
+            name = "visible"
+            label = "Visible"
+            command = ["true"]
+            "#,
+        )
+        .unwrap();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        assert_eq!(app.matching_action_indices(), [1]);
+        let check = app.take_availability_checks().remove(0);
+
+        app.finish_availability_check(check, true);
+
+        assert_eq!(app.matching_action_indices(), [0, 1]);
+        assert_eq!(app.action_selected, 1);
+    }
+
+    #[test]
+    fn act_003_act_011_direct_gated_action_waits_for_its_probe() {
+        let mut app = app();
+        app.action_config = toml::from_str(
+            r#"
+            [[items]]
+            name = "gated"
+            label = "Gated"
+            key = "ctrl-r"
+            command = ["true"]
+            availability = { command = ["true"] }
+            "#,
+        )
+        .unwrap();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL));
+
+        assert_eq!(app.outcome, Outcome::Running);
+        let check = app.take_availability_checks().remove(0);
+        app.finish_availability_check(check, true);
+        assert_eq!(app.outcome, Outcome::ActionRequested(0));
+    }
+
+    #[test]
+    fn act_011_menu_eligibility_checks_every_action() {
+        let mut app = app();
+        app.action_config = toml::from_str(
+            r#"
+            menu = "ctrl-a"
+
+            [[items]]
+            name = "hidden"
+            label = "Hidden"
+            command = ["true"]
+            when = [{ field = "missing", is_set = true }]
+
+            [[items]]
+            name = "visible"
+            label = "Visible"
+            command = ["true"]
+            "#,
+        )
+        .unwrap();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+
+        assert!(app.action_menu);
+        assert_eq!(app.matching_action_indices(), [1]);
     }
 
     #[test]
