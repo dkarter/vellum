@@ -116,7 +116,7 @@ template = [
     { token = "$label", fg = "$focus_color", bold = true },
     { token = "$status_icon", fg = "$status_color", searchable = false, align = "right" },
     " ",
-    { token = "$agent_status", fg = "$status_color", searchable = false, align = "right" },
+    { token = "$agent_status", fg = "$status_color", searchable = true, align = "right" },
   ],
   [
     { token = "󰉋 ", fg = "#7dcfff", searchable = false },

@@ -63,6 +63,7 @@ Vellum SHALL bundle a compact workspace switcher showing workspace identity, che
 - GIVEN the bundled Herdr workspace palette
 - WHEN its filter configuration is parsed
 - THEN it provides the same lifecycle-state choices, icons, and colors as the Herdr agent palette
+- AND workspace lifecycle status participates in fuzzy search
 
 ### Requirement: Provide a Herdr agent palette
 
@@ -86,6 +87,7 @@ Vellum SHALL bundle an agent switcher showing each active agent's status.
 - WHEN its filter configuration is parsed
 - THEN working, done, idle, blocked, and unknown states have dedicated filter choices
 - AND working uses a yellow filled circle, blocked a red filled circle, idle a green ring, done a blue filled circle, and unknown a gray dot
+- AND agent lifecycle status participates in fuzzy search
 
 ### Requirement: Provide a file finder palette
 

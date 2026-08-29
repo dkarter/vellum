@@ -52,3 +52,15 @@ Vellum SHALL provide a dedicated filter mode whose configured choices narrow fuz
 - WHEN the user enters filter mode and presses a choice key
 - THEN only items whose configured source field exactly matches that choice remain visible
 - AND the configured all key or the active choice clears it while Escape exits filter mode without changing Vim mode
+
+#### Scenario: Filtered selection preserves accept behavior {#FIL-002}
+
+- GIVEN an active filter with a visible selected item and a configured default action
+- WHEN the user presses the accept binding while filter mode is open
+- THEN Vellum exits filter mode and requests the default action for that filtered item
+
+#### Scenario: Filtered output-only selection preserves accept behavior {#FIL-003}
+
+- GIVEN an active filter with a visible selected item and no configured default action
+- WHEN the user presses the accept binding while filter mode is open
+- THEN Vellum exits filter mode and accepts the value of that filtered item

@@ -75,10 +75,12 @@ The library includes these palettes:
 
 The Herdr palettes use the installed CLI's `herdr api snapshot` JSON, refresh
 live agent state, and filter working, done, idle, blocked, or unknown entries
-with Ctrl-G. Their status circles and colors match Herdr. Workspace checkout
-paths under the current home directory are displayed relative to `~`. The file
-palette runs `fd` directly and applies a compact filetype icon map adapted from
-Snacks.nvim's `nvim-web-devicons` fallback.
+with Ctrl-G. Lifecycle status also participates in normal fuzzy search, so a
+query such as `blo` matches blocked entries. Their status circles and colors
+match Herdr. Workspace checkout paths under the current home directory are
+displayed relative to `~`. The file palette runs `fd` directly and applies a
+compact filetype icon map adapted from Snacks.nvim's `nvim-web-devicons`
+fallback.
 
 The workspace palette focuses on Enter. Ctrl-A opens its action menu. A selected
 HWT worktree can be removed and the choices refreshed without leaving Vellum.

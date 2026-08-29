@@ -60,7 +60,7 @@ template = [
     { token = "$status_icon", fg = "$status_color", searchable = false },
     " ",
     { token = "$agent", bold = true },
-    { token = "$agent_status", fg = "$status_color", searchable = false, align = "right" },
+    { token = "$agent_status", fg = "$status_color", searchable = true, align = "right" },
   ],
   [{ token = "$terminal_title_stripped", fg = "#c0caf5" }],
   [

@@ -206,6 +206,9 @@ impl App {
             {
                 self.active_filter = (self.active_filter != Some(index)).then_some(index);
                 self.refilter();
+            } else if self.bindings_match(key, &self.keybindings.accept) {
+                self.filter_mode = false;
+                self.accept_selected();
             }
             return;
         }
@@ -255,11 +258,7 @@ impl App {
         if self.bindings_match(key, &self.keybindings.cancel) {
             self.outcome = Outcome::Cancelled;
         } else if self.bindings_match(key, &self.keybindings.accept) {
-            if let Some(index) = self.action_config.default_index() {
-                self.request_action(index);
-            } else if let Some(item) = self.selected_item() {
-                self.outcome = Outcome::Accepted(item.value.clone());
-            }
+            self.accept_selected();
         } else if self.bindings_match(key, &self.keybindings.down) {
             self.move_down();
         } else if self.bindings_match(key, &self.keybindings.up) {
@@ -548,6 +547,14 @@ impl App {
                 }
             }
             ActionAvailabilityState::Unavailable => {}
+        }
+    }
+
+    fn accept_selected(&mut self) {
+        if let Some(index) = self.action_config.default_index() {
+            self.request_action(index);
+        } else if let Some(item) = self.selected_item() {
+            self.outcome = Outcome::Accepted(item.value.clone());
         }
     }
 
@@ -1126,6 +1133,58 @@ mod tests {
         app.handle_key(KeyEvent::from(KeyCode::Esc));
         assert_eq!(app.visible, [0]);
         assert_eq!(app.input_mode, InputMode::Normal);
+    }
+
+    #[test]
+    fn fil_002_filtered_selection_preserves_default_action_acceptance() {
+        let mut app = app_with_actions();
+        app.source_items[0].insert("state".into(), "working".into());
+        app.source_items[1].insert("state".into(), "idle".into());
+        app.filter_config = toml::from_str(
+            r#"
+            mode = "ctrl-g"
+
+            [[choices]]
+            key = "i"
+            label = "idle"
+            source = "state"
+            value = "idle"
+            "#,
+        )
+        .unwrap();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::from(KeyCode::Char('i')));
+        assert_eq!(app.visible, [1]);
+
+        app.handle_key(KeyEvent::from(KeyCode::Enter));
+
+        assert!(!app.filter_mode);
+        assert_eq!(app.selected_source_item().unwrap()["id"], "2");
+        assert_eq!(app.outcome, Outcome::ActionRequested(0));
+    }
+
+    #[test]
+    fn fil_003_filtered_output_only_selection_accepts_visible_value() {
+        let mut app = app();
+        app.source_items[0].insert("state".into(), "working".into());
+        app.source_items[1].insert("state".into(), "idle".into());
+        app.filter_config = toml::from_str(
+            r#"
+            [[choices]]
+            key = "i"
+            label = "idle"
+            source = "state"
+            value = "idle"
+            "#,
+        )
+        .unwrap();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::from(KeyCode::Char('i')));
+        app.handle_key(KeyEvent::from(KeyCode::Enter));
+
+        assert_eq!(app.outcome, Outcome::Accepted("2".into()));
     }
 
     #[test]

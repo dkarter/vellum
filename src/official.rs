@@ -307,6 +307,12 @@ mod tests {
         assert_eq!(config.filters.choices[2].icon, "○");
         assert_eq!(config.filters.choices[4].icon, "·");
         assert_eq!(config.filters.choices[4].fg.as_deref(), Some("#999999"));
+        let item = representative_item("herdr-agents");
+        assert!(
+            render_item(&item, &config.item, 0)
+                .search_text
+                .contains("working")
+        );
     }
 
     #[test]
@@ -333,6 +339,12 @@ mod tests {
         assert_eq!(
             representative_item("herdr-workspaces")["agent_status"],
             workspace.filters.choices[0].value
+        );
+        let item = representative_item("herdr-workspaces");
+        assert!(
+            render_item(&item, &workspace.item, 0)
+                .search_text
+                .contains("working")
         );
     }
 
