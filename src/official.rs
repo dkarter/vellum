@@ -130,8 +130,12 @@ mod tests {
 
     const SNAPSHOT: &str = r#"{
       "result":{"snapshot":{
-        "workspaces":[{"workspace_id":"w1","number":1,"label":"vellum","focused":true,"agent_status":"working","pane_count":2,"worktree":{"repo_name":"vellum","checkout_path":"/tmp/vellum"}}],
-        "agents":[{"workspace_id":"w1","pane_id":"w1:p1","agent":"opencode","agent_status":"working","terminal_title_stripped":"Official palettes","cwd":"/tmp/vellum"}]
+        "workspaces":[{"workspace_id":"w1","number":1,"label":"vellum","focused":true,"agent_status":"working","pane_count":3,"worktree":{"repo_name":"vellum","checkout_path":"/tmp/vellum"}}],
+        "agents":[
+          {"workspace_id":"w1","pane_id":"w1:p1","agent":"opencode","agent_status":"working","terminal_title_stripped":"Official palettes","cwd":"/tmp/vellum"},
+          {"workspace_id":"w1","pane_id":"w1:p2","agent":"opencode","agent_status":"idle","terminal_title_stripped":"Second OpenCode","cwd":"/tmp/vellum"},
+          {"workspace_id":"w1","pane_id":"w1:p3","agent":"future-agent","agent_status":"idle","terminal_title_stripped":"Future agent","cwd":"/tmp/vellum"}
+        ]
       }}
     }"#;
 
@@ -265,10 +269,7 @@ mod tests {
                 .template
                 .iter()
                 .flatten()
-                .all(|segment| match segment {
-                    SegmentConfig::Token(token) => token != "$pane_id",
-                    SegmentConfig::Styled(segment) => segment.token != "$pane_id",
-                })
+                .all(|segment| segment_token(segment) != "$pane_id")
         );
     }
 
@@ -417,7 +418,6 @@ mod tests {
                 .iter()
                 .any(|segment| segment.text == "/tmp/vellum")
         );
-
         let mut app = App::new(
             vec![item],
             config.item.clone(),
@@ -531,6 +531,19 @@ mod tests {
                 "{name} references missing source field {field}"
             );
         }
+        for repeated in config
+            .item
+            .template
+            .iter()
+            .flatten()
+            .filter_map(SegmentConfig::repeated)
+        {
+            assert!(
+                field_value(item, &repeated.for_each).is_some(),
+                "{name} repeats missing source field {}",
+                repeated.for_each
+            );
+        }
         for choice in &config.filters.choices {
             assert!(
                 field_value(item, &choice.source).is_some(),
@@ -543,6 +556,7 @@ mod tests {
     fn segment_token(segment: &SegmentConfig) -> &str {
         match segment {
             SegmentConfig::Token(token) => token,
+            SegmentConfig::Repeated(segment) => &segment.token,
             SegmentConfig::Styled(segment) => &segment.token,
         }
     }

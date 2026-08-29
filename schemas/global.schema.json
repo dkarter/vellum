@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/global.schema.json",
   "title": "Vellum global configuration",
   "description": "Global Vellum defaults merged beneath individual palettes.",
   "$ref": "./config-options.schema.json"

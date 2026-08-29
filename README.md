@@ -260,7 +260,25 @@ content. Item borders are disabled by default to fit cleanly inside multiplexer
 popups and panes; set `item.border = true` when Vellum provides the outer chrome.
 Horizontal item padding defaults to `1`, aligning item text with the content
 inside the search border. Set `item.padding` to any non-negative cell count.
+Set `item.spacing` to add blank terminal rows between adjacent items; `1` is the
+smallest visible separation. Set `item.alternate_background` to a color for odd
+visible entries when you want separation without consuming another terminal row.
 Set `search.title` to label the input for a specific palette.
+
+A template object with `for_each` repeats its `token` for every value in an
+array field. Object elements expose their fields directly, while scalar elements
+are available as `$value`; outer item fields remain available through
+`$parent.field`. `separator`, styling, searchability, and alignment apply to
+every rendered element. Empty token results are omitted, with separators placed
+only between rendered values. Set `unique = true` to keep only the first instance
+of each rendered value. Missing and non-array fields render no segments.
+
+```toml
+template = [[
+  "$name",
+  { for_each = "$members", token = "$member_icon", separator = " ", searchable = false, align = "right" },
+]]
+```
 
 Token definitions derive a display token from another source field. Definitions
 are checked in order, and `when` matches one or more exact source values. A token
@@ -285,9 +303,12 @@ name = "agent_label"
 source = "agent"
 ```
 
-`examples/herdr-agents-icons.toml` contains a complete opt-in Herdr agent
-palette. Its agent logos use private-use glyphs and require a compatible patched
-font, so they are intentionally not part of the official `herdr-agents` palette.
+`examples/herdr-agents-icons.toml` and
+`examples/herdr-workspaces-icons.toml` contain complete opt-in Herdr palettes.
+Their agent logos use private-use glyphs and require a compatible patched font,
+so they are intentionally not part of the official palettes. The workspace
+example alternates subtle item backgrounds to separate its denser two-line
+entries without adding terminal rows.
 
 Colors accept Ratatui names such as `cyan`, `dark_gray`, and `reset`, or RGB hex
 values such as `#7aa2f7`. A color beginning with `$` reads its value from the

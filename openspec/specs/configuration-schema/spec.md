@@ -37,6 +37,7 @@ Vellum SHALL configure Taplo to use the bundled schema for example TOML files.
 - GIVEN the global and palette schema entry points
 - WHEN their configuration fields are inspected
 - THEN both reference one bundled schema containing the shared option definitions
+- AND local schema loading resolves that reference locally rather than rebasing it to the published schema URL
 
 #### Scenario: Shared schema describes palette filters {#SCH-005}
 
@@ -49,3 +50,9 @@ Vellum SHALL configure Taplo to use the bundled schema for example TOML files.
 - GIVEN the shared configuration option schema
 - WHEN its action definitions are inspected
 - THEN it describes default and menu controls, named argv or shell commands, interpolated working directories, direct bindings, icons, descriptions, field and cached command availability conditions, and success behavior
+
+#### Scenario: Shared schema describes repeated template segments {#SCH-007}
+
+- GIVEN the shared configuration option schema
+- WHEN its item template segment definitions are inspected
+- THEN it describes array iteration, element tokens, separators, uniqueness, styling, searchability, and alignment

@@ -147,6 +147,29 @@ pub fn herdr_workspaces(input: &str) -> Result<Vec<SourceItem>> {
             );
             item.insert("agent_status".into(), state.into());
             item.insert(
+                "agents".into(),
+                workspace_agents
+                    .iter()
+                    .map(|agent| {
+                        Value::Object(Map::from_iter([
+                            (
+                                "agent".into(),
+                                agent
+                                    .get("agent")
+                                    .cloned()
+                                    .unwrap_or_else(|| "agent".into()),
+                            ),
+                            (
+                                "agent_status".into(),
+                                normalized_state(agent.get("agent_status").and_then(Value::as_str))
+                                    .into(),
+                            ),
+                        ]))
+                    })
+                    .collect::<Vec<_>>()
+                    .into(),
+            );
+            item.insert(
                 "agent_summary".into(),
                 if workspace_agents.is_empty() {
                     "○ no active agents".into()
@@ -450,7 +473,12 @@ mod tests {
         assert_eq!(items[1]["worktree"], Value::Null);
         assert_eq!(items[0]["working_agents"], "● opencode: Official palettes");
         assert_eq!(items[0]["idle_agents"], "○ claude: Reviewing tests");
+        assert_eq!(items[0]["agents"][0]["agent"], "opencode");
+        assert_eq!(items[0]["agents"][0]["agent_status"], "working");
+        assert_eq!(items[0]["agents"][1]["agent"], "claude");
+        assert_eq!(items[0]["agents"][1]["agent_status"], "idle");
         assert_eq!(items[1]["agent_summary"], "○ no active agents");
+        assert_eq!(items[1]["agents"], json!([]));
     }
 
     #[test]

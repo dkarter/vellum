@@ -79,19 +79,36 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
         .saturating_mul(2)
         .saturating_add(if config.item.border { 2 } else { 0 });
     let inner_width = list_area.width.saturating_sub(horizontal_chrome) as usize;
-    let list_items: Vec<_> = app
-        .visible
-        .iter()
-        .map(|&index| {
-            let selected = app.visible.get(app.selected) == Some(&index);
-            let lines: Vec<_> = app.items[index]
-                .rows
-                .iter()
-                .map(|row| render_row(row, inner_width, theme, selected))
-                .collect();
-            ListItem::new(lines)
-        })
-        .collect();
+    let spacing = usize::from(config.item.spacing.min(list_area.height));
+    let capacity = if spacing == 0 {
+        app.visible.len()
+    } else {
+        app.visible.len().saturating_mul(2)
+    };
+    let mut list_items = Vec::with_capacity(capacity);
+    let mut selected_list_index = None;
+    for (position, &index) in app.visible.iter().enumerate() {
+        if position > 0 && spacing > 0 {
+            list_items.push(ListItem::new(vec![Line::default(); spacing]));
+        }
+        let selected = app.visible.get(app.selected) == Some(&index);
+        if selected {
+            selected_list_index = Some(list_items.len());
+        }
+        let alternate_background = (position % 2 == 1)
+            .then_some(config.item.alternate_background.as_deref())
+            .flatten();
+        let lines: Vec<_> = app.items[index]
+            .rows
+            .iter()
+            .map(|row| render_row(row, inner_width, theme, selected, alternate_background))
+            .collect();
+        let mut list_item = ListItem::new(lines);
+        if let Some(background) = alternate_background {
+            list_item = list_item.style(Style::new().bg(color(background)));
+        }
+        list_items.push(list_item);
+    }
     let list_block = Block::new()
         .borders(if config.item.border {
             Borders::LEFT | Borders::RIGHT
@@ -103,8 +120,7 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
     let list = List::new(list_items)
         .block(list_block)
         .highlight_style(Style::new().bg(color(&theme.selection_background)));
-    let mut state =
-        ListState::default().with_selected((!app.visible.is_empty()).then_some(app.selected));
+    let mut state = ListState::default().with_selected(selected_list_index);
     frame.render_stateful_widget(list, list_area, &mut state);
 
     let footer_text = if let Some(status) = &app.status {
@@ -342,7 +358,13 @@ fn search_view(query: &str, cursor: usize, width: usize) -> (&str, u16) {
     (&query[start..], cursor_offset)
 }
 
-fn render_row<'a>(row: &'a RenderedRow, width: usize, theme: &Theme, selected: bool) -> Line<'a> {
+fn render_row<'a>(
+    row: &'a RenderedRow,
+    width: usize,
+    theme: &Theme,
+    selected: bool,
+    background: Option<&str>,
+) -> Line<'a> {
     let split = row
         .segments
         .iter()
@@ -354,13 +376,17 @@ fn render_row<'a>(row: &'a RenderedRow, width: usize, theme: &Theme, selected: b
     let right_width: usize = right.iter().map(display_width).sum();
     let mut spans: Vec<_> = left
         .iter()
-        .map(|segment| span(segment, theme, selected))
+        .map(|segment| span(segment, theme, selected, background))
         .collect();
     if !right.is_empty() {
         spans.push(Span::raw(
             " ".repeat(width.saturating_sub(left_width + right_width)),
         ));
-        spans.extend(right.iter().map(|segment| span(segment, theme, selected)));
+        spans.extend(
+            right
+                .iter()
+                .map(|segment| span(segment, theme, selected, background)),
+        );
     }
     Line::from(spans)
 }
@@ -369,7 +395,12 @@ fn display_width(segment: &RenderedSegment) -> usize {
     Line::from(segment.text.as_str()).width()
 }
 
-fn span<'a>(segment: &'a RenderedSegment, theme: &Theme, selected: bool) -> Span<'a> {
+fn span<'a>(
+    segment: &'a RenderedSegment,
+    theme: &Theme,
+    selected: bool,
+    background: Option<&str>,
+) -> Span<'a> {
     let mut style = Style::new()
         .fg(segment.fg.as_deref().map_or_else(
             || {
@@ -381,10 +412,13 @@ fn span<'a>(segment: &'a RenderedSegment, theme: &Theme, selected: bool) -> Span
             },
             color,
         ))
-        .bg(segment
-            .bg
-            .as_deref()
-            .map_or_else(|| color(&theme.background), color));
+        .bg(color(
+            segment
+                .bg
+                .as_deref()
+                .or(background)
+                .unwrap_or(&theme.background),
+        ));
     if segment.bold {
         style = style.add_modifier(Modifier::BOLD);
     }
@@ -572,6 +606,113 @@ mod tests {
         terminal
             .draw(|frame| render(frame, &mut app, &config))
             .unwrap();
+    }
+
+    #[test]
+    fn ui_010_item_spacing_separates_list_entries() {
+        let mut config = Config::parse(
+            r##"
+                [source]
+                cmd = "unused"
+
+                [item]
+                spacing = 1
+                template = [["$name"]]
+                value = "$id"
+
+                [theme]
+                selection_background = "#00ffff"
+            "##,
+        )
+        .unwrap();
+        config.search.enabled = false;
+        let source = json!([
+            { "id": "1", "name": "OpenCode" },
+            { "id": "2", "name": "Claude" }
+        ]);
+        let mut app = App::new(
+            source
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item.as_object().unwrap().clone())
+                .collect(),
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            false,
+        );
+        app.selected = 1;
+        let mut terminal = Terminal::new(TestBackend::new(20, 5)).unwrap();
+
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+
+        assert_eq!(buffer[(1, 0)].symbol(), "O");
+        assert_eq!(buffer[(1, 1)].symbol(), " ");
+        assert_eq!(buffer[(1, 2)].symbol(), "C");
+        assert_ne!(buffer[(1, 1)].bg, buffer[(1, 2)].bg);
+    }
+
+    #[test]
+    fn ui_011_alternating_backgrounds_follow_visible_order() {
+        let mut config = Config::parse(
+            r##"
+                [source]
+                cmd = "unused"
+
+                [item]
+                alternate_background = "#202020"
+                template = [["$name"]]
+                value = "$id"
+
+                [theme]
+                background = "#101010"
+                selection_background = "#00ffff"
+            "##,
+        )
+        .unwrap();
+        config.search.enabled = false;
+        let source = json!([
+            { "id": "1", "name": "One" },
+            { "id": "2", "name": "Two" },
+            { "id": "3", "name": "Three" }
+        ]);
+        let mut app = App::new(
+            source
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item.as_object().unwrap().clone())
+                .collect(),
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            false,
+        );
+        app.selected = 2;
+        let mut terminal = Terminal::new(TestBackend::new(20, 4)).unwrap();
+
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        assert_eq!(buffer[(1, 0)].bg, Color::Rgb(16, 16, 16));
+        assert_eq!(buffer[(1, 1)].bg, Color::Rgb(32, 32, 32));
+        assert_eq!(buffer[(1, 2)].bg, Color::Rgb(0, 255, 255));
+
+        app.visible = vec![1, 2];
+        app.selected = 1;
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        assert_eq!(buffer[(1, 0)].bg, Color::Rgb(16, 16, 16));
+        assert_eq!(buffer[(1, 1)].bg, Color::Rgb(0, 255, 255));
     }
 
     #[test]

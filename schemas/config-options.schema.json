@@ -107,6 +107,11 @@
       "properties": {
         "border": { "type": "boolean", "default": false },
         "padding": { "type": "integer", "minimum": 0, "maximum": 65535, "default": 1 },
+        "spacing": { "type": "integer", "minimum": 0, "maximum": 65535, "default": 0 },
+        "alternate_background": {
+          "description": "Background color for odd visible list entries.",
+          "type": "string"
+        },
         "value": { "type": "string", "minLength": 1 },
         "template": {
           "type": "array",
@@ -302,6 +307,23 @@
           "required": ["token"],
           "properties": {
             "token": { "type": "string" },
+            "fg": { "type": "string" },
+            "bg": { "type": "string" },
+            "bold": { "type": "boolean", "default": false },
+            "searchable": { "type": "boolean", "default": true },
+            "align": { "enum": ["left", "right"], "default": "left" }
+          }
+        },
+        {
+          "description": "Render one non-empty token for every element in an array field. Object fields resolve directly, scalar elements resolve through $value, and outer item fields resolve through $parent.field.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["for_each", "token"],
+          "properties": {
+            "for_each": { "type": "string", "minLength": 1 },
+            "token": { "type": "string" },
+            "separator": { "type": "string", "default": "" },
+            "unique": { "type": "boolean", "default": false },
             "fg": { "type": "string" },
             "bg": { "type": "string" },
             "bold": { "type": "boolean", "default": false },

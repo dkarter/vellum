@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json",
   "title": "Vellum configuration",
   "description": "An individual Vellum palette.",
   "$ref": "./config-options.schema.json"

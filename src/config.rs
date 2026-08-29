@@ -396,6 +396,10 @@ pub struct ItemConfig {
     #[serde(default = "default_padding")]
     pub padding: u16,
     #[serde(default)]
+    pub spacing: u16,
+    #[serde(default)]
+    pub alternate_background: Option<String>,
+    #[serde(default)]
     pub tokens: Vec<TokenDefinition>,
     pub template: Vec<Vec<SegmentConfig>>,
     pub value: String,
@@ -426,7 +430,39 @@ pub struct TokenDefinition {
 #[serde(untagged)]
 pub enum SegmentConfig {
     Token(String),
+    Repeated(RepeatedSegment),
     Styled(StyledSegment),
+}
+
+impl SegmentConfig {
+    pub(crate) fn repeated(&self) -> Option<&RepeatedSegment> {
+        if let Self::Repeated(segment) = self {
+            Some(segment)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct RepeatedSegment {
+    pub for_each: String,
+    pub token: String,
+    #[serde(default)]
+    pub separator: String,
+    #[serde(default)]
+    pub unique: bool,
+    #[serde(default)]
+    pub fg: Option<String>,
+    #[serde(default)]
+    pub bg: Option<String>,
+    #[serde(default)]
+    pub bold: bool,
+    #[serde(default = "default_true")]
+    pub searchable: bool,
+    #[serde(default)]
+    pub align: Alignment,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -724,6 +760,17 @@ impl Config {
                 bail!("animated token '{}' has no animation_frames", token.name);
             }
         }
+        for repeated in self
+            .item
+            .template
+            .iter()
+            .flatten()
+            .filter_map(SegmentConfig::repeated)
+        {
+            if repeated.for_each.trim().is_empty() || repeated.token.trim().is_empty() {
+                bail!("repeated segment for_each and token cannot be empty");
+            }
+        }
         Ok(())
     }
 }
@@ -795,6 +842,8 @@ mod tests {
         assert!(config.input.vim);
         assert_eq!(config.input.start_mode, InputMode::Insert);
         assert_eq!(config.item.padding, 1);
+        assert_eq!(config.item.spacing, 0);
+        assert_eq!(config.item.alternate_background, None);
         assert_eq!(config.theme.selection_background, "cyan");
     }
 
@@ -888,6 +937,7 @@ mod tests {
 
             [item]
             padding = 3
+            spacing = 1
         "#;
         let palette = format!("{MINIMAL}\n[search]\nplaceholder = 'Palette'");
 
@@ -897,6 +947,7 @@ mod tests {
         assert_eq!(config.input.start_mode, InputMode::Normal);
         assert_eq!(config.keybindings.down.label(), "ctrl-j");
         assert_eq!(config.item.padding, 3);
+        assert_eq!(config.item.spacing, 1);
     }
 
     #[test]

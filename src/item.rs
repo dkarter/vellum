@@ -1,10 +1,13 @@
-use std::{cmp::Ordering, collections::HashMap};
+use std::{
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+};
 
 use nucleo_matcher::{Config as MatcherConfig, Matcher, Utf32Str, pattern::Pattern};
 use serde_json::{Map, Value};
 
 use crate::{
-    config::{Alignment, ItemConfig, SegmentConfig, StyledSegment, TokenDefinition},
+    config::{Alignment, ItemConfig, RepeatedSegment, SegmentConfig, TokenDefinition},
     frecency::FrecencyRank,
 };
 
@@ -50,17 +53,26 @@ pub fn render_item(
         .template
         .iter()
         .map(|row| {
-            let segments = row
-                .iter()
-                .map(|segment| {
-                    let (rendered, is_searchable) =
-                        render_segment(item, &config.tokens, segment, elapsed_ms);
-                    if is_searchable && !rendered.text.is_empty() {
-                        searchable.push(rendered.text.clone());
+            let mut segments = Vec::new();
+            for segment in row {
+                if let SegmentConfig::Repeated(repeated) = segment {
+                    for (rendered, is_searchable) in
+                        render_repeated_segments(item, &config.tokens, repeated, elapsed_ms)
+                    {
+                        if is_searchable {
+                            searchable.push(rendered.text.clone());
+                        }
+                        segments.push(rendered);
                     }
-                    rendered
-                })
-                .collect();
+                    continue;
+                }
+                let (rendered, is_searchable) =
+                    render_segment(item, &config.tokens, segment, elapsed_ms);
+                if is_searchable && !rendered.text.is_empty() {
+                    searchable.push(rendered.text.clone());
+                }
+                segments.push(rendered);
+            }
             RenderedRow { segments }
         })
         .collect();
@@ -70,6 +82,49 @@ pub fn render_item(
         search_text: searchable.join(" "),
         value: resolve(item, &config.value),
     }
+}
+
+fn render_repeated_segments(
+    item: &Map<String, Value>,
+    definitions: &[TokenDefinition],
+    repeated: &RepeatedSegment,
+    elapsed_ms: u64,
+) -> Vec<(RenderedSegment, bool)> {
+    let Some(values) = field_value(item, &repeated.for_each).and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    let mut segments = Vec::with_capacity(values.len());
+    let mut seen = repeated.unique.then(HashSet::new);
+    for value in values {
+        let context = value.as_object().map_or_else(
+            || RenderContext::scalar(value, item),
+            |element| RenderContext::element(element, item),
+        );
+        let presentation = SegmentPresentation {
+            token: &repeated.token,
+            fg: repeated.fg.as_deref(),
+            bg: repeated.bg.as_deref(),
+            bold: repeated.bold,
+            searchable: repeated.searchable,
+            align: repeated.align,
+        };
+        let (mut rendered, searchable) =
+            render_token(context, definitions, presentation, elapsed_ms);
+        if rendered.text.is_empty() {
+            continue;
+        }
+        if seen
+            .as_mut()
+            .is_some_and(|seen| !seen.insert(rendered.text.clone()))
+        {
+            continue;
+        }
+        if !segments.is_empty() {
+            rendered.text.insert_str(0, &repeated.separator);
+        }
+        segments.push((rendered, searchable));
+    }
+    segments
 }
 
 pub fn matching_indices(items: &[RenderedItem], query: &str) -> Vec<usize> {
@@ -140,38 +195,154 @@ fn render_segment(
     segment: &SegmentConfig,
     elapsed_ms: u64,
 ) -> (RenderedSegment, bool) {
-    let (token, style, searchable, align) = match segment {
-        SegmentConfig::Token(token) => (token.as_str(), None, true, Alignment::Left),
-        SegmentConfig::Styled(style) => (
-            style.token.as_str(),
-            Some(style),
-            style.searchable,
-            style.align,
-        ),
+    let presentation = match segment {
+        SegmentConfig::Token(token) => SegmentPresentation {
+            token,
+            fg: None,
+            bg: None,
+            bold: false,
+            searchable: true,
+            align: Alignment::Left,
+        },
+        SegmentConfig::Styled(style) => SegmentPresentation {
+            token: &style.token,
+            fg: style.fg.as_deref(),
+            bg: style.bg.as_deref(),
+            bold: style.bold,
+            searchable: style.searchable,
+            align: style.align,
+        },
+        SegmentConfig::Repeated(_) => {
+            unreachable!("repeated segments are expanded before rendering")
+        }
     };
-    let name = token.strip_prefix('$').unwrap_or(token);
+    render_token(
+        RenderContext::root(item),
+        definitions,
+        presentation,
+        elapsed_ms,
+    )
+}
+
+#[derive(Clone, Copy)]
+struct SegmentPresentation<'a> {
+    token: &'a str,
+    fg: Option<&'a str>,
+    bg: Option<&'a str>,
+    bold: bool,
+    searchable: bool,
+    align: Alignment,
+}
+
+#[derive(Clone, Copy)]
+struct RenderContext<'a> {
+    element: Option<&'a Map<String, Value>>,
+    parent: Option<&'a Map<String, Value>>,
+    scalar: Option<&'a Value>,
+}
+
+impl<'a> RenderContext<'a> {
+    fn root(item: &'a Map<String, Value>) -> Self {
+        Self {
+            element: Some(item),
+            parent: None,
+            scalar: None,
+        }
+    }
+
+    fn element(element: &'a Map<String, Value>, parent: &'a Map<String, Value>) -> Self {
+        Self {
+            element: Some(element),
+            parent: Some(parent),
+            scalar: None,
+        }
+    }
+
+    fn scalar(value: &'a Value, parent: &'a Map<String, Value>) -> Self {
+        Self {
+            element: None,
+            parent: Some(parent),
+            scalar: Some(value),
+        }
+    }
+
+    fn value(self, path: &str) -> Option<&'a Value> {
+        let path = path.strip_prefix('$').unwrap_or(path);
+        if path == "value" {
+            return self
+                .scalar
+                .or_else(|| self.element.and_then(|element| field_value(element, path)));
+        }
+        if let Some(path) = path.strip_prefix("parent.") {
+            return self.parent.and_then(|parent| field_value(parent, path));
+        }
+        self.element.and_then(|element| field_value(element, path))
+    }
+
+    fn text(self, path: &str) -> String {
+        value_text(self.value(path))
+    }
+
+    fn matches(self, path: &str, expected: &str) -> bool {
+        match self.value(path) {
+            Some(Value::String(value)) => value == expected,
+            Some(Value::Bool(value)) => expected.parse() == Ok(*value),
+            Some(Value::Number(value)) => expected
+                .parse::<serde_json::Number>()
+                .is_ok_and(|expected| &expected == value),
+            Some(Value::Null) => expected == "null",
+            Some(Value::Array(_) | Value::Object(_)) => false,
+            None => false,
+        }
+    }
+
+    fn resolve(self, expression: &str) -> String {
+        expression
+            .strip_prefix('$')
+            .map_or_else(|| expression.to_owned(), |path| self.text(path))
+    }
+}
+
+fn render_token(
+    context: RenderContext<'_>,
+    definitions: &[TokenDefinition],
+    presentation: SegmentPresentation<'_>,
+    elapsed_ms: u64,
+) -> (RenderedSegment, bool) {
+    let name = presentation
+        .token
+        .strip_prefix('$')
+        .unwrap_or(presentation.token);
     let definition = definitions.iter().find(|definition| {
         definition.name == name
             && (definition.when.is_empty()
                 || definition
                     .when
                     .iter()
-                    .any(|expected| field(item, &definition.source) == *expected))
+                    .any(|expected| context.matches(&definition.source, expected)))
     });
 
     let text = definition.map_or_else(
         || {
-            if token.starts_with('$') {
-                field(item, name)
+            if presentation.token.starts_with('$') {
+                context.text(name)
             } else {
-                token.to_owned()
+                presentation.token.to_owned()
             }
         },
-        |definition| definition_text(item, definition, elapsed_ms),
+        |definition| definition_text(context, definition, elapsed_ms),
     );
-    let (fg, bg, bold) = merged_style(definition, style);
-    let fg = fg.map(|value| resolve(item, &value));
-    let bg = bg.map(|value| resolve(item, &value));
+    let fg = presentation
+        .fg
+        .map(str::to_owned)
+        .or_else(|| definition.and_then(|definition| definition.fg.clone()))
+        .map(|value| context.resolve(&value));
+    let bg = presentation
+        .bg
+        .map(str::to_owned)
+        .or_else(|| definition.and_then(|definition| definition.bg.clone()))
+        .map(|value| context.resolve(&value));
+    let bold = presentation.bold || definition.is_some_and(|definition| definition.bold);
 
     (
         RenderedSegment {
@@ -179,14 +350,14 @@ fn render_segment(
             fg,
             bg,
             bold,
-            align,
+            align: presentation.align,
         },
-        searchable,
+        presentation.searchable,
     )
 }
 
 fn definition_text(
-    item: &Map<String, Value>,
+    context: RenderContext<'_>,
     definition: &TokenDefinition,
     elapsed_ms: u64,
 ) -> String {
@@ -198,22 +369,7 @@ fn definition_text(
     definition
         .text
         .clone()
-        .unwrap_or_else(|| field(item, &definition.source))
-}
-
-fn merged_style(
-    definition: Option<&TokenDefinition>,
-    style: Option<&StyledSegment>,
-) -> (Option<String>, Option<String>, bool) {
-    let fg = style
-        .and_then(|style| style.fg.clone())
-        .or_else(|| definition.and_then(|definition| definition.fg.clone()));
-    let bg = style
-        .and_then(|style| style.bg.clone())
-        .or_else(|| definition.and_then(|definition| definition.bg.clone()));
-    let bold = style.is_some_and(|style| style.bold)
-        || definition.is_some_and(|definition| definition.bold);
-    (fg, bg, bold)
+        .unwrap_or_else(|| context.text(&definition.source))
 }
 
 fn resolve(item: &Map<String, Value>, expression: &str) -> String {
@@ -242,7 +398,10 @@ pub(crate) fn field_value_at<'a>(item: &'a Map<String, Value>, path: &[&str]) ->
 }
 
 fn field(item: &Map<String, Value>, path: &str) -> String {
-    let value = field_value(item, path);
+    value_text(field_value(item, path))
+}
+
+fn value_text(value: Option<&Value>) -> String {
     match value {
         Some(Value::String(value)) => value.clone(),
         Some(Value::Null) | None => String::new(),
@@ -326,6 +485,69 @@ mod tests {
         let rendered = render_item(&source_item(), &config, 0);
 
         assert_eq!(rendered.rows[0].segments[1].fg.as_deref(), Some("green"));
+    }
+
+    #[test]
+    fn itm_004_renders_mapped_array_elements_as_aligned_segments() {
+        let config: ItemConfig = toml::from_str(
+            r#"
+            template = [
+              [{ for_each = "$agents", token = "$agent_icon", separator = " ", unique = true, fg = "$parent.color", bold = true, searchable = false, align = "right" }],
+              [{ for_each = "$labels", token = "$label", separator = ", " }],
+              [{ for_each = "$optional", token = "$name", separator = ", ", searchable = false }],
+              [{ for_each = "$missing", token = "$name" }],
+              [{ for_each = "$not_array", token = "$name" }]
+            ]
+            value = "$id"
+
+            [[tokens]]
+            name = "agent_icon"
+            source = "agent"
+            when = ["opencode"]
+            text = "OC"
+
+            [[tokens]]
+            name = "agent_icon"
+            source = "agent"
+            text = "?"
+
+            [[tokens]]
+            name = "label"
+            source = "value"
+            "#,
+        )
+        .unwrap();
+        let item = json!({
+            "id": "workspace",
+            "color": "cyan",
+            "agents": [{ "agent": "opencode" }, { "agent": "opencode" }, { "agent": "future" }],
+            "labels": ["one", "two"],
+            "optional": [{}, { "name": "shown" }, {}],
+            "not_array": "ignored"
+        });
+
+        let rendered = render_item(item.as_object().unwrap(), &config, 0);
+
+        assert_eq!(rendered.rows[0].segments[0].text, "OC");
+        assert_eq!(rendered.rows[0].segments[1].text, " ?");
+        assert!(
+            rendered.rows[0]
+                .segments
+                .iter()
+                .all(|segment| segment.align == Alignment::Right)
+        );
+        assert!(
+            rendered.rows[0]
+                .segments
+                .iter()
+                .all(|segment| segment.fg.as_deref() == Some("cyan") && segment.bold)
+        );
+        assert_eq!(rendered.rows[1].segments[0].text, "one");
+        assert_eq!(rendered.rows[1].segments[1].text, ", two");
+        assert_eq!(rendered.rows[2].segments[0].text, "shown");
+        assert!(rendered.rows[3].segments.is_empty());
+        assert!(rendered.rows[4].segments.is_empty());
+        assert_eq!(rendered.search_text, "one , two");
     }
 
     #[test]

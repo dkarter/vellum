@@ -65,8 +65,15 @@ fn sch_004_global_and_palette_schemas_share_option_definitions() {
 
     assert_eq!(palette["$ref"], "./config-options.schema.json");
     assert_eq!(global["$ref"], palette["$ref"]);
+    assert!(palette.get("$id").is_none());
+    assert!(global.get("$id").is_none());
     assert!(shared["properties"]["search"]["properties"]["title"].is_object());
     assert!(shared["properties"]["theme"]["properties"]["insert_mode_background"].is_object());
+    assert_eq!(
+        shared["properties"]["item"]["properties"]["spacing"]["default"],
+        0
+    );
+    assert!(shared["properties"]["item"]["properties"]["alternate_background"].is_object());
 }
 
 #[test]
@@ -144,6 +151,32 @@ fn sch_006_shared_schema_describes_native_actions() {
 }
 
 #[test]
+fn sch_007_shared_schema_describes_repeated_template_segments() {
+    let shared: Value =
+        serde_json::from_str(&fs::read_to_string("schemas/config-options.schema.json").unwrap())
+            .unwrap();
+    let repeated = &shared["$defs"]["segment"]["oneOf"][2];
+
+    assert_eq!(
+        repeated["required"],
+        serde_json::json!(["for_each", "token"])
+    );
+    for field in [
+        "for_each",
+        "token",
+        "separator",
+        "unique",
+        "fg",
+        "bg",
+        "bold",
+        "searchable",
+        "align",
+    ] {
+        assert!(repeated["properties"][field].is_object(), "{field}");
+    }
+}
+
+#[test]
 fn itm_003_icon_agent_example_rewrites_known_agents_and_preserves_unknown_agents() {
     let example = fs::read_to_string("examples/herdr-agents-icons.toml").unwrap();
     let config = Config::parse(&example).unwrap();
@@ -157,4 +190,32 @@ fn itm_003_icon_agent_example_rewrites_known_agents_and_preserves_unknown_agents
     assert_eq!(unknown.rows[0].segments[2].text, "future-agent");
     assert_eq!(config.item.tokens.last().unwrap().source, "agent");
     assert!(config.item.tokens.last().unwrap().when.is_empty());
+}
+
+#[test]
+fn itm_004_ui_011_workspace_icon_example_repeats_unique_agents_with_alternating_backgrounds() {
+    let example = fs::read_to_string("examples/herdr-workspaces-icons.toml").unwrap();
+    let config = Config::parse(&example).unwrap();
+    let item = serde_json::json!({
+        "workspace_id": "w1",
+        "label": "vellum",
+        "focus_color": "blue",
+        "status_icon": "●",
+        "status_color": "yellow",
+        "agent_status": "working",
+        "checkout_path_display": "~/dev/vellum",
+        "agents": [
+            { "agent": "opencode" },
+            { "agent": "opencode" },
+            { "agent": "future-agent" }
+        ]
+    });
+
+    let rendered = render_item(item.as_object().unwrap(), &config.item, 0);
+
+    assert_eq!(config.item.spacing, 0);
+    assert_eq!(config.item.alternate_background.as_deref(), Some("#1e2030"));
+    assert_eq!(rendered.rows[1].segments[2].text, " OpenCode");
+    assert_eq!(rendered.rows[1].segments[3].text, " future-agent");
+    assert_eq!(rendered.rows[1].segments.len(), 4);
 }

@@ -35,3 +35,15 @@ Vellum SHALL allow ordered exact-match token definitions to replace source field
 - GIVEN conditional token definitions mapping known agent names to icon labels followed by an unconditional source-field definition
 - WHEN Vellum renders known and unknown agents
 - THEN known agents use their configured icon labels and unknown agents retain their source values
+
+### Requirement: Repeat template segments for array values
+
+Vellum SHALL allow a template segment to iterate an array field and render one configured token per element.
+
+#### Scenario: Render mapped array elements as aligned segments {#ITM-004}
+
+- GIVEN a structured source item containing an array and token definitions for its elements
+- WHEN Vellum renders a repeated template segment with a separator, alignment, and uniqueness enabled
+- THEN it emits each distinct non-empty mapped value once, preserving first-seen order and the configured separator, style, alignment, and searchability
+- AND object elements resolve their fields directly, scalar elements resolve through `$value`, and outer item fields resolve through `$parent`
+- AND empty mappings, missing fields, and non-array fields do not produce segments or separators

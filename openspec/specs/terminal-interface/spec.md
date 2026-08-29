@@ -18,7 +18,7 @@ Vellum SHALL render search state, multiline items, metadata alignment, selection
 
 ### Requirement: Configure item chrome
 
-Vellum SHALL disable item borders by default and allow borders and horizontal padding to be configured.
+Vellum SHALL disable item borders, vertical spacing, and alternating backgrounds by default and allow each to be configured with horizontal padding.
 
 #### Scenario: Item borders can be enabled {#UI-002}
 
@@ -37,6 +37,19 @@ Vellum SHALL disable item borders by default and allow borders and horizontal pa
 - GIVEN maximum padding and a narrow terminal
 - WHEN the list is rendered
 - THEN layout arithmetic saturates without panicking
+
+#### Scenario: Item spacing separates list entries {#UI-010}
+
+- GIVEN a configured vertical item spacing
+- WHEN the list is rendered
+- THEN that number of unselected blank rows separates adjacent items
+
+#### Scenario: Alternating backgrounds distinguish list entries {#UI-011}
+
+- GIVEN a configured alternate item background
+- WHEN the visible list is rendered or filtered
+- THEN odd visible entries use that background while even entries retain the theme background
+- AND selection highlighting remains visually distinct
 
 ### Requirement: Keep the search cursor visible
 
