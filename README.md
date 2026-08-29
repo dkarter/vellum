@@ -73,9 +73,12 @@ The library includes these palettes:
 | `herdr-agents`     | `herdr`              | Output agent pane ID |
 | `files`            | `fd` and a Nerd Font | Output file path     |
 
-The Herdr palettes use the installed CLI's `herdr api snapshot` JSON and refresh
-live agent state. The file palette runs `fd` directly and applies a compact
-filetype icon map adapted from Snacks.nvim's `nvim-web-devicons` fallback.
+The Herdr palettes use the installed CLI's `herdr api snapshot` JSON, refresh
+live agent state, and filter working, done, idle, blocked, or unknown entries
+with Ctrl-G. Their status circles and colors match Herdr. Workspace checkout
+paths under the current home directory are displayed relative to `~`. The file
+palette runs `fd` directly and applies a compact filetype icon map adapted from
+Snacks.nvim's `nvim-web-devicons` fallback.
 
 The workspace palette focuses on Enter. Ctrl-A opens its action menu. A selected
 HWT worktree can be removed and the choices refreshed without leaving Vellum.
@@ -407,8 +410,8 @@ as `status a/w/d/i/b/u`, instead of repeating every choice label. List
 navigation remains available in filter mode, including Ctrl-N and Ctrl-P.
 
 Filter choices are configured per palette and can also be supplied by global
-defaults. The `herdr-agents` palette includes `w`, `d`, `i`, `b`, and `u` for
-working, done, idle, blocked, and unknown agents.
+defaults. The `herdr-agents` and `herdr-workspaces` palettes include `w`, `d`,
+`i`, `b`, and `u` for working, done, idle, blocked, and unknown entries.
 
 ## Frecency
 

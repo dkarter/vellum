@@ -299,7 +299,41 @@ mod tests {
             ]
         );
         assert_eq!(config.filters.choices[0].icon, "●");
-        assert_eq!(config.filters.choices[0].fg.as_deref(), Some("#7aa2f7"));
+        assert_eq!(config.filters.choices[0].fg.as_deref(), Some("yellow"));
+        assert_eq!(config.filters.choices[1].icon, "●");
+        assert_eq!(config.filters.choices[1].fg.as_deref(), Some("#89b4fa"));
+        assert_eq!(config.filters.choices[2].fg.as_deref(), Some("#a6e3a1"));
+        assert_eq!(config.filters.choices[3].fg.as_deref(), Some("#ff6188"));
+        assert_eq!(config.filters.choices[2].icon, "○");
+        assert_eq!(config.filters.choices[4].icon, "·");
+        assert_eq!(config.filters.choices[4].fg.as_deref(), Some("#999999"));
+    }
+
+    #[test]
+    fn pal_016_workspace_palette_filters_match_agent_lifecycle_states() {
+        let workspace = PALETTES
+            .iter()
+            .find(|palette| palette.name == "herdr-workspaces")
+            .map(|palette| Config::parse(palette.contents).unwrap())
+            .unwrap();
+        let agents = PALETTES
+            .iter()
+            .find(|palette| palette.name == "herdr-agents")
+            .map(|palette| Config::parse(palette.contents).unwrap())
+            .unwrap();
+
+        assert_eq!(workspace.filters, agents.filters);
+        assert!(
+            workspace
+                .filters
+                .choices
+                .iter()
+                .all(|choice| choice.source == "agent_status")
+        );
+        assert_eq!(
+            representative_item("herdr-workspaces")["agent_status"],
+            workspace.filters.choices[0].value
+        );
     }
 
     #[test]
@@ -353,7 +387,7 @@ mod tests {
             template,
             [
                 vec!["$label", "$status_icon", " ", "$agent_status",],
-                vec!["󰉋 ", "$checkout_path"],
+                vec!["󰉋 ", "$checkout_path_display"],
             ]
         );
         assert_eq!(rendered.rows.len(), 2);
