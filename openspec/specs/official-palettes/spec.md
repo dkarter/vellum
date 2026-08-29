@@ -48,6 +48,13 @@ Vellum SHALL bundle a compact workspace switcher showing workspace identity, che
 - THEN its name and status share the first row, its checkout path uses the second row, and numeric and agent-detail metadata are hidden
 - AND the workspace name aligns with the folder icon while focus is indicated by color instead of a leading glyph
 
+#### Scenario: Workspace palette provides native focus and removal actions {#PAL-015}
+
+- GIVEN the bundled Herdr workspace palette
+- WHEN its actions are inspected
+- THEN Enter focuses the selected workspace and exits
+- AND the quick-action menu can remove its HWT worktree and refresh the workspace source
+
 ### Requirement: Provide a Herdr agent palette
 
 Vellum SHALL bundle an agent switcher showing each active agent's status.

@@ -390,6 +390,42 @@ mod tests {
         );
     }
 
+    #[test]
+    fn pal_015_workspace_palette_provides_native_focus_and_removal_actions() {
+        let palette = PALETTES
+            .iter()
+            .find(|palette| palette.name == "herdr-workspaces")
+            .unwrap();
+        let config = Config::parse(palette.contents).unwrap();
+
+        assert_eq!(config.actions.default.as_deref(), Some("focus"));
+        assert_eq!(config.actions.menu.label(), "ctrl-a");
+        assert_eq!(config.actions.items[0].icon, "󰍉");
+        assert!(!config.actions.items[0].description.is_empty());
+        assert_eq!(
+            config.actions.items[0].command.as_deref(),
+            Some(
+                ["herdr", "workspace", "focus", "$workspace_id"]
+                    .map(str::to_owned)
+                    .as_slice()
+            )
+        );
+        assert_eq!(
+            config.actions.items[1].command.as_deref(),
+            Some(
+                ["hwt", "remove", "--workspace", "$workspace_id"]
+                    .map(str::to_owned)
+                    .as_slice()
+            )
+        );
+        assert_eq!(
+            config.actions.items[1].on_success,
+            crate::config::OnSuccess::Refresh
+        );
+        assert_eq!(config.actions.items[1].when.len(), 2);
+        assert!(!config.actions.items[1].is_available(&representative_item(palette.name)));
+    }
+
     fn representative_item(name: &str) -> Map<String, Value> {
         match name {
             "herdr-workspaces" => builtins::herdr_workspaces(SNAPSHOT).unwrap().remove(0),

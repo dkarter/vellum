@@ -101,3 +101,30 @@ fn sch_005_shared_schema_describes_palette_filters() {
     assert!(shared["$defs"]["filter-choice"]["properties"]["icon"].is_object());
     assert!(shared["$defs"]["filter-choice"]["properties"]["fg"].is_object());
 }
+
+#[test]
+fn sch_006_shared_schema_describes_native_actions() {
+    let shared: Value =
+        serde_json::from_str(&fs::read_to_string("schemas/config-options.schema.json").unwrap())
+            .unwrap();
+
+    let actions = &shared["properties"]["actions"]["properties"];
+    assert_eq!(actions["menu"]["default"], "ctrl-a");
+    assert!(actions["default"].is_object());
+    assert_eq!(actions["items"]["items"]["$ref"], "#/$defs/action");
+    let action = &shared["$defs"]["action"];
+    assert!(action["properties"]["command"].is_object());
+    assert!(action["properties"]["shell"].is_object());
+    assert_eq!(action["properties"]["icon"]["default"], "");
+    assert_eq!(action["properties"]["description"]["default"], "");
+    assert_eq!(
+        action["properties"]["when"]["items"]["$ref"],
+        "#/$defs/action-condition"
+    );
+    assert!(shared["$defs"]["action-condition"]["oneOf"].is_array());
+    assert_eq!(
+        action["properties"]["on_success"]["enum"],
+        serde_json::json!(["exit", "refresh"])
+    );
+    assert!(action["oneOf"].is_array());
+}

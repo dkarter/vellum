@@ -84,3 +84,20 @@ Vellum SHALL style the active filter beside the search title and show compact fi
 - WHEN the normal and filter-mode frames are drawn
 - THEN the active choice's icon, label, and color appear beside the search title
 - AND the footer identifies the filter binding outside filter mode and compactly lists the filter name and keys inside it
+
+### Requirement: Separate terminal rendering from machine output
+
+Vellum SHALL write all interactive terminal control and restoration bytes to stderr while reserving stdout for an accepted configured value.
+
+#### Scenario: Accepted output is clean {#OUT-001}
+
+- GIVEN an interactive palette using selection output
+- WHEN an item is accepted
+- THEN stdout contains only the selected configured value and a trailing newline
+- AND terminal rendering and restoration use stderr
+
+#### Scenario: Cancellation has no output {#OUT-002}
+
+- GIVEN a running interactive palette
+- WHEN the user cancels
+- THEN stdout remains empty

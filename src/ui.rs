@@ -2,10 +2,10 @@ use std::str::FromStr;
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Padding, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Padding, Paragraph},
 };
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -107,7 +107,9 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
         ListState::default().with_selected((!app.visible.is_empty()).then_some(app.selected));
     frame.render_stateful_widget(list, list_area, &mut state);
 
-    let footer_text = if app.filter_mode {
+    let footer_text = if let Some(status) = &app.status {
+        status.clone()
+    } else if app.filter_mode {
         let mut keys = Vec::with_capacity(config.filters.choices.len() + 1);
         if !config.filters.clear.is_empty() {
             keys.push(config.filters.clear.label());
@@ -147,6 +149,12 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
                 config.filters.label
             ));
         }
+        if config.keybindings.enabled
+            && app.has_available_actions()
+            && !config.actions.menu.is_empty()
+        {
+            text.push_str(&format!("  {} actions", config.actions.menu.label()));
+        }
         text
     };
     let mut footer = Vec::with_capacity(3);
@@ -175,9 +183,147 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
     }
     footer.push(Span::styled(
         footer_text,
-        Style::new().fg(color(&theme.border)),
+        Style::new().fg(if app.status.is_some() {
+            Color::Red
+        } else {
+            color(&theme.border)
+        }),
     ));
     frame.render_widget(Paragraph::new(Line::from(footer)), footer_area);
+
+    if app.action_menu {
+        render_action_menu(frame, app, config);
+    }
+}
+
+fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) {
+    let area = frame.area();
+    let matching = app.matching_action_indices();
+    let content_width = matching
+        .iter()
+        .map(|index| &config.actions.items[*index])
+        .map(|action| {
+            let heading = if action.icon.is_empty() {
+                action.label.clone()
+            } else {
+                format!("{}  {}", action.icon, action.label)
+            };
+            Line::from(heading)
+                .width()
+                .max(Line::from(action.description.as_str()).width())
+                + if action.key.is_empty() {
+                    0
+                } else {
+                    action.key.label().len() + 3
+                }
+        })
+        .max()
+        .unwrap_or(30) as u16;
+    let max_width = if area.width >= 12 {
+        area.width - 6
+    } else {
+        area.width
+    };
+    let width = content_width.saturating_add(8).max(40).min(max_width);
+    let action_height = matching.len().saturating_mul(2) as u16;
+    let max_height = if area.height >= 8 {
+        area.height - 4
+    } else {
+        area.height
+    };
+    let height = action_height.saturating_add(5).max(7).min(max_height);
+    let popup = centered(area, width, height);
+    let outer = Block::new()
+        .borders(Borders::ALL)
+        .title(" Actions ")
+        .style(base_style(&config.theme))
+        .border_style(Style::new().fg(color(&config.theme.border)));
+    let inner = outer.inner(popup);
+    let [search_area, list_area] =
+        Layout::vertical([Constraint::Length(2), Constraint::Fill(1)]).areas(inner);
+    frame.render_widget(Clear, popup);
+    frame.render_widget(outer, popup);
+    if inner.width < 4 || inner.height < 3 {
+        return;
+    }
+
+    let (query, cursor_offset) = if app.action_query.is_empty() {
+        ("Filter actions...", 0)
+    } else {
+        search_view(
+            &app.action_query,
+            app.action_cursor,
+            search_area.width.saturating_sub(3) as usize,
+        )
+    };
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![Span::raw("› "), Span::raw(query)]))
+            .style(base_style(&config.theme))
+            .block(
+                Block::new()
+                    .borders(Borders::BOTTOM)
+                    .border_style(Style::new().fg(color(&config.theme.border))),
+            ),
+        search_area,
+    );
+    frame.set_cursor_position((search_area.x + 2 + cursor_offset, search_area.y));
+
+    let items = matching
+        .iter()
+        .map(|index| &config.actions.items[*index])
+        .map(|action| {
+            let mut heading = Vec::new();
+            if !action.icon.is_empty() {
+                heading.push(Span::styled(
+                    format!("{}  ", action.icon),
+                    Style::new().add_modifier(Modifier::BOLD),
+                ));
+            }
+            heading.push(Span::styled(
+                &action.label,
+                Style::new().add_modifier(Modifier::BOLD),
+            ));
+            if !action.key.is_empty() {
+                heading.push(Span::styled(
+                    format!("  {}", action.key.label()),
+                    Style::new().fg(color(&config.theme.border)),
+                ));
+            }
+            ListItem::new(vec![
+                Line::from(heading),
+                Line::from(Span::styled(
+                    &action.description,
+                    Style::new().fg(color(&config.theme.border)),
+                )),
+            ])
+        });
+    if matching.is_empty() {
+        frame.render_widget(
+            Paragraph::new("No matching actions")
+                .style(Style::new().fg(color(&config.theme.border)))
+                .block(Block::new().padding(Padding::horizontal(2))),
+            list_area,
+        );
+        return;
+    }
+    let list = List::new(items)
+        .block(Block::new().padding(Padding::horizontal(2)))
+        .highlight_style(
+            Style::new()
+                .fg(color(&config.theme.selection_foreground))
+                .bg(color(&config.theme.selection_background)),
+        );
+    let mut state = ListState::default().with_selected(Some(app.action_selected));
+    frame.render_stateful_widget(list, list_area, &mut state);
+}
+
+fn centered(area: Rect, width: u16, height: u16) -> Rect {
+    Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width,
+        height,
+    }
 }
 
 fn search_view(query: &str, cursor: usize, width: usize) -> (&str, u16) {
@@ -620,5 +766,96 @@ mod tests {
             .collect();
         assert!(output.contains("FILTER"));
         assert!(output.contains("state a/w"));
+    }
+
+    #[test]
+    fn act_009_action_menu_renders_icons_descriptions_and_fuzzy_results() {
+        let config = Config::parse(
+            r#"
+                [source]
+                cmd = "unused"
+
+                [actions]
+                menu = "ctrl-a"
+
+                [[actions.items]]
+                name = "refresh"
+                label = "Refresh source"
+                icon = "R"
+                description = "Rerun the source"
+                command = ["true"]
+
+                [[actions.items]]
+                name = "failure"
+                label = "Show an error"
+                icon = "!"
+                description = "Display a useful failure"
+                command = ["false"]
+
+                [item]
+                template = [["$name"]]
+                value = "$id"
+            "#,
+        )
+        .unwrap();
+        let source = json!([{ "id": "1", "name": "One" }]);
+        let mut app = App::new_with_frecency_and_actions(
+            source
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item.as_object().unwrap().clone())
+                .collect(),
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            true,
+            Default::default(),
+            config.actions.clone(),
+        );
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('a'),
+            crossterm::event::KeyModifiers::CONTROL,
+        ));
+        let mut terminal = Terminal::new(TestBackend::new(70, 16)).unwrap();
+
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(output.contains("Actions"), "{output}");
+        assert!(output.contains("Filter actions..."), "{output}");
+        assert!(output.contains("R  Refresh source"), "{output}");
+        assert!(output.contains("Rerun the source"), "{output}");
+        assert!(output.contains("!  Show an error"), "{output}");
+
+        for character in "failure".chars() {
+            app.handle_key(crossterm::event::KeyEvent::from(
+                crossterm::event::KeyCode::Char(character),
+            ));
+        }
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(output.contains("failure"), "{output}");
+        assert!(output.contains("Show an error"), "{output}");
+        assert!(!output.contains("Refresh source"), "{output}");
+
+        let mut tiny = Terminal::new(TestBackend::new(5, 3)).unwrap();
+        tiny.draw(|frame| render(frame, &mut app, &config)).unwrap();
     }
 }

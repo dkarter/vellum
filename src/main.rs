@@ -1,5 +1,6 @@
 use std::{
-    env, fs, io,
+    env, fs,
+    io::{self, Write},
     path::PathBuf,
     sync::mpsc::{self, Receiver, TryRecvError},
     thread,
@@ -8,19 +9,28 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use crossterm::{
-    cursor::SetCursorStyle,
+    cursor::{SetCursorStyle, Show},
     event::{self, Event, KeyEventKind},
     execute,
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use ratatui::{Terminal, backend::CrosstermBackend};
 use vellum::{
+    action,
     app::{App, Outcome},
-    config::Config,
+    config::{Config, OnSuccess},
     frecency::Frecency,
     official, source, ui,
 };
 
 const REFRESH_POLL_RATE: Duration = Duration::from_millis(50);
 const MAX_EVENTS_PER_TICK: usize = 64;
+type Tui = Terminal<CrosstermBackend<io::Stderr>>;
+
+struct TerminalSession {
+    terminal: Tui,
+    active: bool,
+}
 
 fn main() -> Result<()> {
     let palette_request = match cli(env::args().skip(1))? {
@@ -85,7 +95,7 @@ fn main() -> Result<()> {
             Default::default()
         }
     };
-    let mut app = App::new_with_frecency(
+    let mut app = App::new_with_frecency_and_actions(
         source_items,
         config.item.clone(),
         config.keybindings.clone(),
@@ -93,20 +103,19 @@ fn main() -> Result<()> {
         config.input.clone(),
         config.search.enabled,
         frecency_scores,
+        config.actions.clone(),
     );
 
-    let mut terminal = ratatui::try_init().context("failed to initialize terminal")?;
-    let result = run(&mut terminal, &mut app, &config);
-    let cursor_result = execute!(io::stdout(), SetCursorStyle::DefaultUserShape);
-    ratatui::restore();
-    cursor_result?;
+    let mut terminal = TerminalSession::init().context("failed to initialize terminal")?;
+    let result = run(&mut terminal.terminal, &mut app, &config);
+    terminal.restore()?;
     let outcome = result?;
-    if let Outcome::Accepted(value) = outcome {
-        if let Err(error) = record_selection(frecency.as_mut(), &palette_key, &value) {
-            eprintln!("warning: failed to record frecency: {error:#}");
-        }
-        println!("{value}");
+    if let Outcome::Accepted(value) = &outcome
+        && let Err(error) = record_selection(frecency.as_mut(), &palette_key, value)
+    {
+        eprintln!("warning: failed to record frecency: {error:#}");
     }
+    write_outcome(&mut io::stdout(), &outcome)?;
     Ok(())
 }
 
@@ -117,7 +126,62 @@ fn record_selection(frecency: Option<&mut Frecency>, palette: &str, value: &str)
     Ok(())
 }
 
-fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App, config: &Config) -> Result<Outcome> {
+impl TerminalSession {
+    fn init() -> Result<Self> {
+        enable_raw_mode()?;
+        let mut stderr = io::stderr();
+        if let Err(error) = execute!(stderr, EnterAlternateScreen) {
+            let _ = disable_raw_mode();
+            return Err(error.into());
+        }
+        match Terminal::new(CrosstermBackend::new(stderr)) {
+            Ok(terminal) => Ok(Self {
+                terminal,
+                active: true,
+            }),
+            Err(error) => {
+                let mut stderr = io::stderr();
+                let _ = execute!(stderr, LeaveAlternateScreen);
+                let _ = disable_raw_mode();
+                Err(error.into())
+            }
+        }
+    }
+
+    fn restore(&mut self) -> Result<()> {
+        if !self.active {
+            return Ok(());
+        }
+        let terminal_result = execute!(
+            self.terminal.backend_mut(),
+            SetCursorStyle::DefaultUserShape,
+            Show,
+            LeaveAlternateScreen
+        );
+        let raw_mode_result = disable_raw_mode();
+        if terminal_result.is_ok() && raw_mode_result.is_ok() {
+            self.active = false;
+        }
+        terminal_result?;
+        raw_mode_result?;
+        Ok(())
+    }
+}
+
+impl Drop for TerminalSession {
+    fn drop(&mut self) {
+        let _ = self.restore();
+    }
+}
+
+fn write_outcome(writer: &mut impl Write, outcome: &Outcome) -> Result<()> {
+    if let Outcome::Accepted(value) = outcome {
+        writeln!(writer, "{value}")?;
+    }
+    Ok(())
+}
+
+fn run(terminal: &mut Tui, app: &mut App, config: &Config) -> Result<Outcome> {
     let started = Instant::now();
     let mut last_animation = Instant::now();
     let mut last_refresh = Instant::now();
@@ -129,9 +193,14 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App, config: &Config) 
     loop {
         if dirty {
             terminal.draw(|frame| ui::render(frame, app, config))?;
-            if cursor_mode != Some(app.input_mode) {
-                set_cursor_style(app.input_mode)?;
-                cursor_mode = Some(app.input_mode);
+            let desired_cursor = if app.action_menu {
+                vellum::config::InputMode::Insert
+            } else {
+                app.input_mode
+            };
+            if cursor_mode != Some(desired_cursor) {
+                set_cursor_style(terminal, desired_cursor)?;
+                cursor_mode = Some(desired_cursor);
             }
             dirty = false;
         }
@@ -149,6 +218,29 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App, config: &Config) 
                 if app.outcome != Outcome::Running || !event::poll(Duration::ZERO)? {
                     break;
                 }
+            }
+        }
+
+        if let Outcome::ActionRequested(index) = app.outcome {
+            dirty = true;
+            refresh_result = None;
+            let action = &config.actions.items[index];
+            let item = app
+                .selected_source_item()
+                .context("selected action has no source item")?;
+            match action::run(action, item) {
+                Ok(()) if action.on_success == OnSuccess::Exit => {
+                    return Ok(Outcome::ActionCompleted);
+                }
+                Ok(()) => match source::run(&config.source) {
+                    Ok(items) => {
+                        app.replace_source(items, started.elapsed().as_millis() as u64);
+                        app.finish_action(None);
+                        last_refresh = Instant::now();
+                    }
+                    Err(error) => app.finish_action(Some(format!("refresh failed: {error:#}"))),
+                },
+                Err(error) => app.finish_action(Some(format!("action failed: {error:#}"))),
             }
         }
 
@@ -188,8 +280,8 @@ fn handle_terminal_event(app: &mut App, event: Event) -> bool {
     }
 }
 
-fn set_cursor_style(mode: vellum::config::InputMode) -> Result<()> {
-    execute!(io::stdout(), cursor_style(mode))?;
+fn set_cursor_style(terminal: &mut Tui, mode: vellum::config::InputMode) -> Result<()> {
+    execute!(terminal.backend_mut(), cursor_style(mode))?;
     Ok(())
 }
 
@@ -470,5 +562,23 @@ mod tests {
             current.to_string_lossy()
         );
         assert_eq!(palette_identity(&current), current.to_string_lossy());
+    }
+
+    #[test]
+    fn out_001_accepted_output_contains_only_the_selected_value() {
+        let mut stdout = Vec::new();
+
+        write_outcome(&mut stdout, &Outcome::Accepted("workspace-42".into())).unwrap();
+
+        assert_eq!(stdout, b"workspace-42\n");
+    }
+
+    #[test]
+    fn out_002_cancellation_has_no_output() {
+        let mut stdout = Vec::new();
+
+        write_outcome(&mut stdout, &Outcome::Cancelled).unwrap();
+
+        assert!(stdout.is_empty());
     }
 }
