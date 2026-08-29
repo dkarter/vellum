@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0](https://github.com/dkarter/vellum/compare/v0.5.0...v0.6.0) (2026-08-29)
+
+
+### Features
+
+* add agent icon palette example ([#15](https://github.com/dkarter/vellum/issues/15)) ([0a5504d](https://github.com/dkarter/vellum/commit/0a5504d328cee3186f673ebbb8585b36e7b4f226))
+* add native palette actions ([#16](https://github.com/dkarter/vellum/issues/16)) ([2c4e189](https://github.com/dkarter/vellum/commit/2c4e18914f8be7ca655524a27bae2c7e7d352fad))
+
+
+### Bug Fixes
+
+* **ci:** ensure release processing completes ([48088bc](https://github.com/dkarter/vellum/commit/48088bc2f75f9ca3a808ec6a5529a2cd306991c4))
+* improve Herdr palette filtering ([22dec4d](https://github.com/dkarter/vellum/commit/22dec4db744063d58125484e43a1f80adce7e0b5))
+
 ## [0.5.0](https://github.com/dkarter/vellum/compare/v0.4.1...v0.5.0) (2026-08-29)
 
 
