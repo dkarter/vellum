@@ -36,21 +36,21 @@ on_success = "refresh"
 name = "open-repository"
 label = "Open repository"
 icon = "󰊤"
-description = "Open this worktree's repository on GitHub"
+description = "Open this checkout's repository on GitHub"
 command = ["gh", "repo", "view", "--web"]
 cwd = "$checkout_path"
-when = [{ field = "worktree", is_set = true }]
+when = [{ field = "checkout_path", is_set = true }]
 on_success = "exit"
 
 [[actions.items]]
 name = "open-pull-request"
 label = "Open pull request"
 icon = ""
-description = "Open the pull request for this worktree branch"
+description = "Open the pull request for this checkout branch"
 command = ["gh", "pr", "view", "--web"]
 cwd = "$checkout_path"
 availability = { command = ["gh", "pr", "view", "--json", "number"], cwd = "$checkout_path", cache_ms = 30000 }
-when = [{ field = "worktree", is_set = true }]
+when = [{ field = "checkout_path", is_set = true }]
 on_success = "exit"
 
 [[actions.items]]
@@ -61,7 +61,7 @@ description = "Open GitHub Actions checks for this pull request"
 command = ["gh", "pr", "checks", "--web"]
 cwd = "$checkout_path"
 availability = { command = ["gh", "pr", "view", "--json", "number"], cwd = "$checkout_path", cache_ms = 30000 }
-when = [{ field = "worktree", is_set = true }]
+when = [{ field = "checkout_path", is_set = true }]
 on_success = "exit"
 
 [item]

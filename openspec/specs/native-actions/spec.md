@@ -38,7 +38,7 @@ Vellum SHALL request the configured default action on Enter and named actions th
 
 ### Requirement: Offer a quick-action menu
 
-Vellum SHALL show a padded in-process menu of actions for the selected item, including configured icons and descriptions, and support fuzzy filtering, navigation, cancellation, and selection without closing the palette.
+Vellum SHALL show a compact in-process menu of actions for the selected item, including configured icons and descriptions, and support fuzzy filtering, navigation, cancellation, and selection without closing the palette.
 
 #### Scenario: Quick-action menu navigates and selects {#ACT-004}
 
@@ -54,6 +54,7 @@ Vellum SHALL show a padded in-process menu of actions for the selected item, inc
 - THEN actions are filtered and ranked by their textual metadata
 - AND arrow keys, Ctrl-N, and Ctrl-P continue to navigate the filtered actions
 - AND each configured icon is separated from its label by one space
+- AND action items use a one-cell horizontal gutter without an extra blank item row
 
 ### Requirement: Resolve command-gated availability without blocking input
 

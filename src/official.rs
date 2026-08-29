@@ -425,6 +425,8 @@ mod tests {
         assert_eq!(config.actions.items[1].when.len(), 2);
         assert!(!config.actions.items[1].is_available(&representative_item(palette.name)));
         let item = representative_item(palette.name);
+        let mut regular_checkout = item.clone();
+        regular_checkout.insert("worktree".into(), Value::Null);
         for (name, command) in [
             ("open-repository", &["gh", "repo", "view", "--web"][..]),
             ("open-pull-request", &["gh", "pr", "view", "--web"]),
@@ -439,6 +441,7 @@ mod tests {
             assert_eq!(action.command.as_deref().unwrap(), command);
             assert_eq!(action.cwd.as_deref(), Some("$checkout_path"));
             assert!(action.is_available(&item));
+            assert!(action.is_available(&regular_checkout));
             if name == "open-repository" {
                 assert!(action.availability.is_none());
             } else {

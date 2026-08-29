@@ -78,9 +78,10 @@ live agent state. The file palette runs `fd` directly and applies a compact
 filetype icon map adapted from Snacks.nvim's `nvim-web-devicons` fallback.
 
 The workspace palette focuses on Enter. Ctrl-A opens its action menu. A selected
-HWT worktree can be removed and the choices refreshed without leaving Vellum,
-or opened on GitHub at its repository, pull request, or pull-request checks. The
-pull-request actions appear only when the worktree branch has a pull request:
+HWT worktree can be removed and the choices refreshed without leaving Vellum.
+Any workspace with a checkout path can be opened on GitHub at its repository,
+pull request, or pull-request checks. The pull-request actions appear only when
+the checkout branch has a pull request:
 
 ```sh
 vellum herdr-workspaces

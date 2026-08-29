@@ -224,14 +224,14 @@ fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) {
     } else {
         area.width
     };
-    let width = content_width.saturating_add(8).max(40).min(max_width);
+    let width = content_width.saturating_add(4).max(36).min(max_width);
     let action_height = matching.len().saturating_mul(2) as u16;
     let max_height = if area.height >= 8 {
         area.height - 4
     } else {
         area.height
     };
-    let height = action_height.saturating_add(5).max(7).min(max_height);
+    let height = action_height.saturating_add(4).max(6).min(max_height);
     let popup = centered(area, width, height);
     let outer = Block::new()
         .borders(Borders::ALL)
@@ -305,13 +305,13 @@ fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) {
                 "No matching actions"
             })
             .style(Style::new().fg(color(&config.theme.border)))
-            .block(Block::new().padding(Padding::horizontal(2))),
+            .block(Block::new().padding(Padding::horizontal(1))),
             list_area,
         );
         return;
     }
     let list = List::new(items)
-        .block(Block::new().padding(Padding::horizontal(2)))
+        .block(Block::new().padding(Padding::horizontal(1)))
         .highlight_style(
             Style::new()
                 .fg(color(&config.theme.selection_foreground))

@@ -54,8 +54,8 @@ Vellum SHALL bundle a compact workspace switcher showing workspace identity, che
 - WHEN its actions are inspected
 - THEN Enter focuses the selected workspace and exits
 - AND the quick-action menu can remove its HWT worktree and refresh the workspace source
-- AND worktree actions can open its GitHub repository, pull request, or pull-request checks
-- AND pull-request actions are offered only when a cached asynchronous GitHub probe finds a pull request for the worktree branch
+- AND a workspace with a checkout path can open its GitHub repository, pull request, or pull-request checks
+- AND pull-request actions are offered only when a cached asynchronous GitHub probe finds a pull request for the checkout branch
 
 ### Requirement: Provide a Herdr agent palette
 
