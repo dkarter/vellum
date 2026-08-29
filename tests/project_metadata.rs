@@ -1,6 +1,7 @@
 use std::{fs, process::Command};
 
 use serde_json::Value;
+use vellum::{config::Config, item::render_item};
 
 #[test]
 fn sch_001_bundled_schema_is_valid_json() {
@@ -128,4 +129,20 @@ fn sch_006_shared_schema_describes_native_actions() {
         serde_json::json!(["exit", "refresh"])
     );
     assert!(action["oneOf"].is_array());
+}
+
+#[test]
+fn itm_003_icon_agent_example_rewrites_known_agents_and_preserves_unknown_agents() {
+    let example = fs::read_to_string("examples/herdr-agents-icons.toml").unwrap();
+    let config = Config::parse(&example).unwrap();
+    let known = serde_json::json!({ "pane_id": "one", "agent": "opencode" });
+    let unknown = serde_json::json!({ "pane_id": "two", "agent": "future-agent" });
+
+    let known = render_item(known.as_object().unwrap(), &config.item, 0);
+    let unknown = render_item(unknown.as_object().unwrap(), &config.item, 0);
+
+    assert_eq!(known.rows[0].segments[2].text, " OpenCode");
+    assert_eq!(unknown.rows[0].segments[2].text, "future-agent");
+    assert_eq!(config.item.tokens.last().unwrap().source, "agent");
+    assert!(config.item.tokens.last().unwrap().when.is_empty());
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/dkarter/vellum/compare/v0.4.1...v0.5.0) (2026-08-29)
+
+
+### Features
+
+* add configurable palette filters ([99c5730](https://github.com/dkarter/vellum/commit/99c5730e004e1f3d9cfc70ef79bc2c59cbf6967f))
+
 ## [0.4.1](https://github.com/dkarter/vellum/compare/v0.4.0...v0.4.1) (2026-07-27)
 
 

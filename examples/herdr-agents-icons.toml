@@ -1,0 +1,184 @@
+#:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json
+
+# This opt-in palette uses private-use agent glyphs from a patched font.
+[search]
+title = "Agents"
+placeholder = "Switch agent..."
+
+[source]
+builtin = "herdr-agents"
+refresh_ms = 750
+
+[filters]
+label = "status"
+mode = "ctrl-g"
+clear = "a"
+
+[[filters.choices]]
+key = "w"
+label = "working"
+source = "agent_status"
+value = "working"
+icon = "●"
+fg = "#7aa2f7"
+
+[[filters.choices]]
+key = "d"
+label = "done"
+source = "agent_status"
+value = "done"
+icon = "✓"
+fg = "#e0af68"
+
+[[filters.choices]]
+key = "i"
+label = "idle"
+source = "agent_status"
+value = "idle"
+icon = "✓"
+fg = "#9ece6a"
+
+[[filters.choices]]
+key = "b"
+label = "blocked"
+source = "agent_status"
+value = "blocked"
+icon = "!"
+fg = "#f7768e"
+
+[[filters.choices]]
+key = "u"
+label = "unknown"
+source = "agent_status"
+value = "unknown"
+icon = "○"
+fg = "#565f89"
+
+[item]
+value = "$pane_id"
+template = [
+  [
+    { token = "$status_icon", fg = "$status_color", searchable = false },
+    " ",
+    { token = "$agent_label", bold = true },
+    { token = "$agent_status", fg = "$status_color", searchable = false, align = "right" },
+  ],
+  [{ token = "$terminal_title_stripped", fg = "#c0caf5" }],
+  [
+    { token = "󰉋 ", fg = "#7dcfff", searchable = false },
+    { token = "$workspace_label", fg = "#7dcfff", bold = true },
+    "  ",
+    { token = "$cwd", fg = "#565f89" },
+  ],
+]
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["amp"]
+text = " Amp"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["claude"]
+text = " Claude"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["cline"]
+text = " Cline"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["codex"]
+text = " Codex"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["copilot"]
+text = " Copilot"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["cursor"]
+text = " Cursor"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["gemini"]
+text = " Gemini"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["grok"]
+text = " Grok"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["hermes"]
+text = " Hermes"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["kilo"]
+text = " Kilo"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["kimi"]
+text = " Kimi"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["mastracode"]
+text = " Mastra Code"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["opencode"]
+text = " OpenCode"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["opencode2"]
+text = " OpenCode v2"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["pi"]
+text = " Pi"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["qodercli"]
+text = " Qoder CLI"
+
+# Keep this unconditional definition last so unmapped agents remain visible.
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+
+[theme]
+foreground = "#c0caf5"
+background = "#1a1b26"
+selection_foreground = "#c0caf5"
+selection_background = "#283457"
+border = "#565f89"
+mode_foreground = "#1a1b26"
+insert_mode_background = "#9ece6a"
+normal_mode_background = "#e0af68"
