@@ -8,6 +8,51 @@ placeholder = "Switch agent..."
 builtin = "herdr-agents"
 refresh_ms = 750
 
+[filters]
+label = "status"
+mode = "ctrl-g"
+clear = "a"
+
+[[filters.choices]]
+key = "w"
+label = "working"
+source = "agent_status"
+value = "working"
+icon = "●"
+fg = "#7aa2f7"
+
+[[filters.choices]]
+key = "d"
+label = "done"
+source = "agent_status"
+value = "done"
+icon = "✓"
+fg = "#e0af68"
+
+[[filters.choices]]
+key = "i"
+label = "idle"
+source = "agent_status"
+value = "idle"
+icon = "✓"
+fg = "#9ece6a"
+
+[[filters.choices]]
+key = "b"
+label = "blocked"
+source = "agent_status"
+value = "blocked"
+icon = "!"
+fg = "#f7768e"
+
+[[filters.choices]]
+key = "u"
+label = "unknown"
+source = "agent_status"
+value = "unknown"
+icon = "○"
+fg = "#565f89"
+
 [item]
 value = "$pane_id"
 template = [

@@ -93,3 +93,13 @@ Vellum SHALL allow global defaults and individual palettes to configure the titl
 - GIVEN a global search title and a palette title override
 - WHEN Vellum parses the layered configuration
 - THEN the palette title wins and omitted titles use the documented default
+
+### Requirement: Configure palette filters
+
+Vellum SHALL allow global defaults and individual palettes to configure filter-mode and all-items bindings, a filter label, and ordered exact-match choices with optional presentation metadata.
+
+#### Scenario: Filter configuration parses and layers {#CFG-011}
+
+- GIVEN a global filter-mode binding and palette filter choices
+- WHEN Vellum parses the layered configuration
+- THEN the filter label and bindings and each choice's key, label, source field, value, icon, and color are retained

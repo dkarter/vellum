@@ -144,6 +144,27 @@ start = "ctrl-a"
 end = "ctrl-e"
 delete_word = "ctrl-w"
 
+[filters]
+label = "state"
+mode = "ctrl-g"
+clear = "a"
+
+[[filters.choices]]
+key = "w"
+label = "working"
+source = "state"
+value = "in_progress"
+icon = "●"
+fg = "yellow"
+
+[[filters.choices]]
+key = "i"
+label = "idle"
+source = "state"
+value = "idle"
+icon = "●"
+fg = "green"
+
 [input]
 vim = true
 start_mode = "insert"
@@ -231,6 +252,25 @@ keybinding settings. The terminal cursor is a bar in insert mode and a block in
 normal mode. When Vim input is enabled, a colored badge at the left of the
 footer shows the active mode. Configure the badge with `theme.mode_foreground`,
 `theme.insert_mode_background`, and `theme.normal_mode_background`.
+
+Palettes can define single-select exact-match filters under `[filters]`. Press
+the configured `mode` binding (`ctrl-g` by default) to enter filter mode, then
+press a choice key to activate it. Press `a` (`filters.clear`) to show all items;
+pressing the active choice again also clears the filter, while choosing another
+replaces it. Escape or the mode binding closes filter mode without changing Vim
+mode or cancelling Vellum. While filter mode is open, its choice keys cannot
+collide with normal- or insert-mode commands. Filters narrow the existing fuzzy
+and frecency-ranked results by exact string source values and support dot paths
+such as `metadata.state`.
+
+The active choice is shown beside the search title using its optional `icon` and
+`fg`. Filter-mode help uses the configured short `label` and compact keys, such
+as `status a/w/d/i/b/u`, instead of repeating every choice label. List
+navigation remains available in filter mode, including Ctrl-N and Ctrl-P.
+
+Filter choices are configured per palette and can also be supplied by global
+defaults. The `herdr-agents` palette includes `w`, `d`, `i`, `b`, and `u` for
+working, done, idle, blocked, and unknown agents.
 
 ## Frecency
 

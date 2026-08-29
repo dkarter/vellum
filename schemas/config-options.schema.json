@@ -63,6 +63,26 @@
         "delete_word": { "$ref": "#/$defs/bindings" }
       }
     },
+    "filters": {
+      "description": "Optional exact-match filters entered through a dedicated mode.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Short name shown before compact filter keys.",
+          "type": "string",
+          "minLength": 1,
+          "default": "filter"
+        },
+        "mode": { "$ref": "#/$defs/bindings", "default": "ctrl-g" },
+        "clear": { "$ref": "#/$defs/bindings", "default": "a" },
+        "choices": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/filter-choice" },
+          "default": []
+        }
+      }
+    },
     "item": {
       "type": "object",
       "additionalProperties": false,
@@ -115,6 +135,47 @@
             "type": "string",
             "pattern": "^(ctrl-)?(up|down|left|right|home|end|enter|esc|escape|backspace|delete|.)$"
           }
+        }
+      ]
+    },
+    "filter-choice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "source", "value"],
+      "properties": {
+        "key": { "$ref": "#/$defs/filter-choice-bindings" },
+        "label": { "type": "string", "minLength": 1 },
+        "source": {
+          "description": "Source field or dot path compared with value.",
+          "type": "string",
+          "minLength": 1
+        },
+        "value": { "type": "string" },
+        "icon": {
+          "description": "Optional icon shown with this choice when active.",
+          "type": "string",
+          "default": ""
+        },
+        "fg": {
+          "description": "Optional active-choice foreground color.",
+          "type": "string"
+        }
+      }
+    },
+    "filter-choice-bindings": {
+      "description": "One or more keys that activate a filter choice.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^(ctrl-)?(up|down|left|right|home|end|enter|esc|escape|backspace|delete|.)$"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(ctrl-)?(up|down|left|right|home|end|enter|esc|escape|backspace|delete|.)$"
+          },
+          "minItems": 1
         }
       ]
     },

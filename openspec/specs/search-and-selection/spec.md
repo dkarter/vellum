@@ -34,10 +34,21 @@ Vellum SHALL preserve selection by configured output value when refreshed items 
 
 ### Requirement: Browse with readline list bindings
 
-Vellum SHALL provide Ctrl-N and Ctrl-P list navigation by default.
+Vellum SHALL provide Ctrl-N and Ctrl-P list navigation by default in input and filter modes.
 
 #### Scenario: Readline bindings move list selection {#NAV-001}
 
 - GIVEN multiple visible items
-- WHEN Ctrl-N or Ctrl-P is pressed
+- WHEN Ctrl-N or Ctrl-P is pressed in input or filter mode
 - THEN selection moves down or up within the list
+
+### Requirement: Apply configured exact-match filters
+
+Vellum SHALL provide a dedicated filter mode whose configured choices narrow fuzzy-search candidates without changing input mode.
+
+#### Scenario: Filter mode toggles an exact-match predicate {#FIL-001}
+
+- GIVEN a palette with configured filter choices and items with different source values
+- WHEN the user enters filter mode and presses a choice key
+- THEN only items whose configured source field exactly matches that choice remain visible
+- AND the configured all key or the active choice clears it while Escape exits filter mode without changing Vim mode

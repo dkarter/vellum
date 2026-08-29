@@ -16,5 +16,10 @@ enabled = true
 down = ["down", "ctrl-n"]
 up = ["up", "ctrl-p"]
 
+[filters]
+label = "filter"
+mode = "ctrl-g"
+clear = "a"
+
 [item]
 padding = 1

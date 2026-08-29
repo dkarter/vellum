@@ -64,6 +64,12 @@ Vellum SHALL bundle an agent switcher showing each active agent's status.
 - WHEN an agent item is rendered
 - THEN the pane ID remains the selection value but is not displayed in the item template
 
+#### Scenario: Agent palette filters by lifecycle state {#PAL-014}
+
+- GIVEN the bundled Herdr agent palette
+- WHEN its filter configuration is parsed
+- THEN working, done, idle, blocked, and unknown states have dedicated filter choices
+
 ### Requirement: Provide a file finder palette
 
 Vellum SHALL bundle an `fd`-backed file finder with colorful Nerd Font filetype icons.

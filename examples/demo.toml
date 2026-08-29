@@ -7,6 +7,27 @@ placeholder = "Find an agent..."
 cmd = """printf '%s\n' '[{"id":"agent-1","agent":"OpenCode","workspace":"Vellum","state":"in_progress","state_color":"yellow","task":"Implementing the palette","pr":"PR #42","pr_state":"draft"},{"id":"agent-2","agent":"Claude","workspace":"Dotfiles","state":"idle","state_color":"green","task":"Waiting for work","pr":"","pr_state":""}]'"""
 refresh_ms = 1000
 
+[filters]
+label = "state"
+mode = "ctrl-g"
+clear = "a"
+
+[[filters.choices]]
+key = "w"
+label = "working"
+source = "state"
+value = "in_progress"
+icon = "●"
+fg = "yellow"
+
+[[filters.choices]]
+key = "i"
+label = "idle"
+source = "state"
+value = "idle"
+icon = "●"
+fg = "green"
+
 [item]
 value = "$id"
 template = [

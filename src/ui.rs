@@ -45,7 +45,24 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
                 search_area.width.saturating_sub(2) as usize,
             )
         };
-        let title = format!(" {} ", config.search.title);
+        let title = if let Some(choice) = app.active_filter() {
+            let filter = if choice.icon.is_empty() {
+                choice.label.clone()
+            } else {
+                format!("{} {}", choice.icon, choice.label)
+            };
+            let mut style = Style::new().add_modifier(Modifier::BOLD);
+            if let Some(fg) = &choice.fg {
+                style = style.fg(color(fg));
+            }
+            Line::from(vec![
+                Span::raw(format!(" {}  ", config.search.title)),
+                Span::styled(filter, style),
+                Span::raw(" "),
+            ])
+        } else {
+            Line::from(format!(" {} ", config.search.title))
+        };
         let input = Paragraph::new(query).style(base_style(theme)).block(
             Block::new()
                 .borders(Borders::ALL)
@@ -90,21 +107,59 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
         ListState::default().with_selected((!app.visible.is_empty()).then_some(app.selected));
     frame.render_stateful_widget(list, list_area, &mut state);
 
-    let footer_text = format!(
-        "{}/{}  {}/{} navigate  {} select  {} cancel",
-        app.visible.len(),
-        app.items.len(),
-        config.keybindings.display_binding(&config.keybindings.up),
-        config.keybindings.display_binding(&config.keybindings.down),
-        config
-            .keybindings
-            .display_binding(&config.keybindings.accept),
-        config
-            .keybindings
-            .display_binding(&config.keybindings.cancel),
-    );
+    let footer_text = if app.filter_mode {
+        let mut keys = Vec::with_capacity(config.filters.choices.len() + 1);
+        if !config.filters.clear.is_empty() {
+            keys.push(config.filters.clear.label());
+        }
+        keys.extend(
+            config
+                .filters
+                .choices
+                .iter()
+                .map(|choice| choice.key.label()),
+        );
+        format!(
+            "{} {}  {}/{} navigate  esc close",
+            config.filters.label,
+            keys.join("/"),
+            config.keybindings.display_binding(&config.keybindings.up),
+            config.keybindings.display_binding(&config.keybindings.down),
+        )
+    } else {
+        let mut text = format!(
+            "{}/{}  {}/{} navigate  {} select  {} cancel",
+            app.visible.len(),
+            app.items.len(),
+            config.keybindings.display_binding(&config.keybindings.up),
+            config.keybindings.display_binding(&config.keybindings.down),
+            config
+                .keybindings
+                .display_binding(&config.keybindings.accept),
+            config
+                .keybindings
+                .display_binding(&config.keybindings.cancel),
+        );
+        if !config.filters.choices.is_empty() {
+            text.push_str(&format!(
+                "  {} {}",
+                config.filters.mode.label(),
+                config.filters.label
+            ));
+        }
+        text
+    };
     let mut footer = Vec::with_capacity(3);
-    if app.vim_enabled() {
+    if app.filter_mode {
+        footer.push(Span::styled(
+            " FILTER ",
+            Style::new()
+                .fg(color(&theme.selection_foreground))
+                .bg(color(&theme.selection_background))
+                .add_modifier(Modifier::BOLD),
+        ));
+        footer.push(Span::raw(" "));
+    } else if app.vim_enabled() {
         let (label, background) = match app.input_mode {
             crate::config::InputMode::Insert => (" INSERT ", &theme.insert_mode_background),
             crate::config::InputMode::Normal => (" NORMAL ", &theme.normal_mode_background),
@@ -229,6 +284,7 @@ mod tests {
                 .collect(),
             config.item.clone(),
             config.keybindings.clone(),
+            config.filters.clone(),
             config.input.clone(),
             true,
         );
@@ -276,6 +332,7 @@ mod tests {
                 .collect(),
             config.item.clone(),
             config.keybindings.clone(),
+            config.filters.clone(),
             config.input.clone(),
             false,
         );
@@ -315,6 +372,7 @@ mod tests {
                 .collect(),
             config.item.clone(),
             config.keybindings.clone(),
+            config.filters.clone(),
             config.input.clone(),
             false,
         );
@@ -354,6 +412,7 @@ mod tests {
                 .collect(),
             config.item.clone(),
             config.keybindings.clone(),
+            config.filters.clone(),
             config.input.clone(),
             false,
         );
@@ -409,6 +468,7 @@ mod tests {
             source_items.clone(),
             config.item.clone(),
             config.keybindings.clone(),
+            config.filters.clone(),
             config.input.clone(),
             true,
         );
@@ -436,6 +496,7 @@ mod tests {
             source_items,
             config.item.clone(),
             config.keybindings.clone(),
+            config.filters.clone(),
             config.input.clone(),
             true,
         );
@@ -451,5 +512,113 @@ mod tests {
             .collect();
         assert!(!output.contains("INSERT"));
         assert!(!output.contains("NORMAL"));
+    }
+
+    #[test]
+    fn ui_009_footer_reflects_filter_state() {
+        let config = Config::parse(
+            r#"
+                [search]
+                title = "Agents"
+
+                [source]
+                cmd = "unused"
+
+                [filters]
+                label = "state"
+                mode = "ctrl-g"
+
+                [[filters.choices]]
+                key = "w"
+                label = "working"
+                source = "state"
+                value = "working"
+                icon = "●"
+                fg = "blue"
+
+                [item]
+                template = [["$name"]]
+                value = "$id"
+            "#,
+        )
+        .unwrap();
+        let source = json!([{ "id": "1", "name": "OpenCode", "state": "working" }]);
+        let mut app = App::new(
+            source
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item.as_object().unwrap().clone())
+                .collect(),
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            true,
+        );
+        let mut terminal = Terminal::new(TestBackend::new(80, 6)).unwrap();
+
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(output.contains("ctrl-g state"));
+
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('g'),
+            crossterm::event::KeyModifiers::CONTROL,
+        ));
+        app.handle_key(crossterm::event::KeyEvent::from(
+            crossterm::event::KeyCode::Char('w'),
+        ));
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('g'),
+            crossterm::event::KeyModifiers::CONTROL,
+        ));
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(output.contains("Agents  ● working"), "{output}");
+        assert_eq!(
+            terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .find(|cell| cell.symbol() == "●")
+                .unwrap()
+                .fg,
+            Color::Blue
+        );
+
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('g'),
+            crossterm::event::KeyModifiers::CONTROL,
+        ));
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(output.contains("FILTER"));
+        assert!(output.contains("state a/w"));
     }
 }

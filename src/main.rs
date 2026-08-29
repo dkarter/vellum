@@ -89,6 +89,7 @@ fn main() -> Result<()> {
         source_items,
         config.item.clone(),
         config.keybindings.clone(),
+        config.filters.clone(),
         config.input.clone(),
         config.search.enabled,
         frecency_scores,
@@ -399,6 +400,7 @@ mod tests {
             Vec::new(),
             config.item,
             config.keybindings,
+            config.filters,
             config.input,
             true,
         );

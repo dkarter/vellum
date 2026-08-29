@@ -4,9 +4,11 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    config::{Bindings, InputConfig, InputMode, ItemConfig, Keybindings},
+    config::{
+        Bindings, FilterChoice, FilterConfig, InputConfig, InputMode, ItemConfig, Keybindings,
+    },
     frecency::FrecencyRank,
-    item::{RenderedItem, matching_indices_with_frecency, render_items},
+    item::{RenderedItem, field_value_at, matching_indices_with_frecency_by, render_items},
     source::SourceItem,
 };
 
@@ -21,6 +23,7 @@ pub enum Outcome {
 pub struct App {
     item_config: ItemConfig,
     keybindings: Keybindings,
+    filter_config: FilterConfig,
     input_config: InputConfig,
     search_enabled: bool,
     source_items: Vec<SourceItem>,
@@ -30,6 +33,8 @@ pub struct App {
     pub query: String,
     pub cursor: usize,
     pub input_mode: InputMode,
+    pub filter_mode: bool,
+    active_filter: Option<usize>,
     pub selected: usize,
     pub outcome: Outcome,
 }
@@ -39,6 +44,7 @@ impl App {
         source_items: Vec<SourceItem>,
         item_config: ItemConfig,
         keybindings: Keybindings,
+        filter_config: FilterConfig,
         input_config: InputConfig,
         search_enabled: bool,
     ) -> Self {
@@ -46,6 +52,7 @@ impl App {
             source_items,
             item_config,
             keybindings,
+            filter_config,
             input_config,
             search_enabled,
             HashMap::new(),
@@ -56,20 +63,21 @@ impl App {
         source_items: Vec<SourceItem>,
         item_config: ItemConfig,
         keybindings: Keybindings,
+        filter_config: FilterConfig,
         input_config: InputConfig,
         search_enabled: bool,
         frecency_scores: HashMap<String, FrecencyRank>,
     ) -> Self {
         let items = render_items(&source_items, &item_config, 0);
-        let visible = matching_indices_with_frecency(&items, "", &frecency_scores);
-        Self {
+        let mut app = Self {
             item_config,
             keybindings,
+            filter_config,
             search_enabled,
             source_items,
             frecency_scores,
             items,
-            visible,
+            visible: Vec::new(),
             query: String::new(),
             cursor: 0,
             input_mode: if input_config.vim {
@@ -78,9 +86,13 @@ impl App {
                 InputMode::Insert
             },
             input_config,
+            filter_mode: false,
+            active_filter: None,
             selected: 0,
             outcome: Outcome::Running,
-        }
+        };
+        app.visible = app.matching_indices();
+        app
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -88,6 +100,32 @@ impl App {
             && key.modifiers.contains(KeyModifiers::CONTROL)
         {
             self.outcome = Outcome::Cancelled;
+            return;
+        }
+        if self.filter_mode {
+            if key.code == KeyCode::Esc || self.filter_config.mode.matches(key) {
+                self.filter_mode = false;
+            } else if self.bindings_match(key, &self.keybindings.down) {
+                self.move_down();
+            } else if self.bindings_match(key, &self.keybindings.up) {
+                self.move_up();
+            } else if self.filter_config.clear.matches(key) {
+                if self.active_filter.take().is_some() {
+                    self.refilter();
+                }
+            } else if let Some(index) = self
+                .filter_config
+                .choices
+                .iter()
+                .position(|choice| choice.key.matches(key))
+            {
+                self.active_filter = (self.active_filter != Some(index)).then_some(index);
+                self.refilter();
+            }
+            return;
+        }
+        if !self.filter_config.choices.is_empty() && self.filter_config.mode.matches(key) {
+            self.filter_mode = true;
             return;
         }
         if key.code == KeyCode::Esc && self.input_config.vim {
@@ -124,8 +162,7 @@ impl App {
 
     pub fn tick(&mut self, elapsed_ms: u64) {
         self.items = render_items(&self.source_items, &self.item_config, elapsed_ms);
-        self.visible =
-            matching_indices_with_frecency(&self.items, &self.query, &self.frecency_scores);
+        self.visible = self.matching_indices();
         self.clamp_selection();
     }
 
@@ -145,8 +182,7 @@ impl App {
         let selected_value = self.selected_item().map(|item| item.value.clone());
         self.source_items = source_items;
         self.items = render_items(&self.source_items, &self.item_config, elapsed_ms);
-        self.visible =
-            matching_indices_with_frecency(&self.items, &self.query, &self.frecency_scores);
+        self.visible = self.matching_indices();
         self.selected = selected_value
             .and_then(|value| {
                 self.visible
@@ -164,6 +200,11 @@ impl App {
             .and_then(|&index| self.items.get(index))
     }
 
+    pub fn active_filter(&self) -> Option<&FilterChoice> {
+        self.active_filter
+            .and_then(|index| self.filter_config.choices.get(index))
+    }
+
     fn move_down(&mut self) {
         if !self.visible.is_empty() {
             self.selected = (self.selected + 1).min(self.visible.len() - 1);
@@ -175,9 +216,35 @@ impl App {
     }
 
     fn refilter(&mut self) {
-        self.visible =
-            matching_indices_with_frecency(&self.items, &self.query, &self.frecency_scores);
+        self.visible = self.matching_indices();
         self.selected = 0;
+    }
+
+    fn matching_indices(&self) -> Vec<usize> {
+        let choice = self.active_filter();
+        let path = choice.map(|choice| {
+            choice
+                .source
+                .strip_prefix('$')
+                .unwrap_or(&choice.source)
+                .split('.')
+                .collect::<Vec<_>>()
+        });
+        matching_indices_with_frecency_by(
+            &self.items,
+            &self.query,
+            &self.frecency_scores,
+            |index| {
+                choice.is_none_or(|choice| {
+                    field_value_at(
+                        &self.source_items[index],
+                        path.as_deref().unwrap_or_default(),
+                    )
+                    .and_then(serde_json::Value::as_str)
+                        == Some(&choice.value)
+                })
+            },
+        )
     }
 
     fn handle_insert_key(&mut self, key: KeyEvent) {
@@ -358,6 +425,7 @@ mod tests {
                 .collect(),
             config,
             Keybindings::default(),
+            FilterConfig::default(),
             InputConfig::default(),
             true,
         )
@@ -371,6 +439,48 @@ mod tests {
         assert_eq!(app.visible, [1]);
         app.handle_key(KeyEvent::from(KeyCode::Enter));
         assert_eq!(app.outcome, Outcome::Accepted("2".into()));
+    }
+
+    #[test]
+    fn fil_001_filter_mode_toggles_exact_match_without_changing_input_mode() {
+        let mut app = app();
+        app.source_items[0].insert("state".into(), "working".into());
+        app.source_items[1].insert("state".into(), "idle".into());
+        app.filter_config = toml::from_str(
+            r#"
+            mode = "ctrl-g"
+
+            [[choices]]
+            key = "w"
+            label = "working"
+            source = "state"
+            value = "working"
+            "#,
+        )
+        .unwrap();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL));
+        assert!(app.filter_mode);
+        app.handle_key(KeyEvent::from(KeyCode::Char('w')));
+        assert_eq!(app.visible, [0]);
+        assert_eq!(app.active_filter().unwrap().label, "working");
+        app.handle_key(KeyEvent::from(KeyCode::Char('a')));
+        assert_eq!(app.visible, [0, 1]);
+        app.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
+        assert_eq!(app.selected, 1);
+        app.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+        assert_eq!(app.selected, 0);
+        app.handle_key(KeyEvent::from(KeyCode::Esc));
+        assert!(!app.filter_mode);
+        assert_eq!(app.input_mode, InputMode::Insert);
+        assert_eq!(app.outcome, Outcome::Running);
+
+        app.input_mode = InputMode::Normal;
+        app.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::from(KeyCode::Char('w')));
+        app.handle_key(KeyEvent::from(KeyCode::Esc));
+        assert_eq!(app.visible, [0]);
+        assert_eq!(app.input_mode, InputMode::Normal);
     }
 
     #[test]

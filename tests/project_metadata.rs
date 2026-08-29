@@ -67,3 +67,37 @@ fn sch_004_global_and_palette_schemas_share_option_definitions() {
     assert!(shared["properties"]["search"]["properties"]["title"].is_object());
     assert!(shared["properties"]["theme"]["properties"]["insert_mode_background"].is_object());
 }
+
+#[test]
+fn sch_005_shared_schema_describes_palette_filters() {
+    let shared: Value =
+        serde_json::from_str(&fs::read_to_string("schemas/config-options.schema.json").unwrap())
+            .unwrap();
+
+    assert_eq!(
+        shared["properties"]["filters"]["properties"]["label"]["default"],
+        "filter"
+    );
+    assert_eq!(
+        shared["properties"]["filters"]["properties"]["mode"]["default"],
+        "ctrl-g"
+    );
+    assert_eq!(
+        shared["properties"]["filters"]["properties"]["clear"]["default"],
+        "a"
+    );
+    assert_eq!(
+        shared["$defs"]["filter-choice"]["required"],
+        serde_json::json!(["key", "label", "source", "value"])
+    );
+    assert_eq!(
+        shared["$defs"]["filter-choice"]["properties"]["key"]["$ref"],
+        "#/$defs/filter-choice-bindings"
+    );
+    assert_eq!(
+        shared["$defs"]["filter-choice-bindings"]["oneOf"][1]["minItems"],
+        1
+    );
+    assert!(shared["$defs"]["filter-choice"]["properties"]["icon"].is_object());
+    assert!(shared["$defs"]["filter-choice"]["properties"]["fg"].is_object());
+}

@@ -13,12 +13,47 @@ pub struct Config {
     #[serde(default)]
     pub keybindings: Keybindings,
     #[serde(default)]
+    pub filters: FilterConfig,
+    #[serde(default)]
     pub input: InputConfig,
     #[serde(default)]
     pub frecency: FrecencyConfig,
     pub item: ItemConfig,
     #[serde(default)]
     pub theme: Theme,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct FilterConfig {
+    pub label: String,
+    pub mode: Bindings,
+    pub clear: Bindings,
+    pub choices: Vec<FilterChoice>,
+}
+
+impl Default for FilterConfig {
+    fn default() -> Self {
+        Self {
+            label: "filter".into(),
+            mode: Bindings::new(["ctrl-g"]),
+            clear: Bindings::new(["a"]),
+            choices: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct FilterChoice {
+    pub key: Bindings,
+    pub label: String,
+    pub source: String,
+    pub value: String,
+    #[serde(default)]
+    pub icon: String,
+    #[serde(default)]
+    pub fg: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -129,6 +164,25 @@ impl Bindings {
         self.0
             .iter()
             .any(|binding| binding.code == key.code && binding.modifiers == key.modifiers)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn overlaps(&self, other: &Self) -> bool {
+        self.0.iter().any(|binding| {
+            other
+                .0
+                .iter()
+                .any(|other| binding.code == other.code && binding.modifiers == other.modifiers)
+        })
+    }
+
+    fn contains_key(&self, code: KeyCode, modifiers: KeyModifiers) -> bool {
+        self.0
+            .iter()
+            .any(|binding| binding.code == code && binding.modifiers == modifiers)
     }
 }
 
@@ -361,6 +415,86 @@ impl Config {
         if self.item.value.trim().is_empty() {
             bail!("item.value cannot be empty");
         }
+        if !self.filters.choices.is_empty() && self.filters.label.trim().is_empty() {
+            bail!("filters.label cannot be empty when filter choices are configured");
+        }
+        let navigation_conflicts = |bindings: &Bindings| {
+            self.keybindings.enabled
+                && (bindings.overlaps(&self.keybindings.down)
+                    || bindings.overlaps(&self.keybindings.up))
+        };
+        let global_binding_conflicts = |bindings: &Bindings| {
+            self.keybindings.enabled
+                && [
+                    &self.keybindings.down,
+                    &self.keybindings.up,
+                    &self.keybindings.accept,
+                    &self.keybindings.cancel,
+                    &self.keybindings.forward,
+                    &self.keybindings.backward,
+                    &self.keybindings.start,
+                    &self.keybindings.end,
+                    &self.keybindings.delete_word,
+                ]
+                .into_iter()
+                .any(|global| bindings.overlaps(global))
+        };
+        let input_conflicts = self.search.enabled
+            && self
+                .filters
+                .mode
+                .0
+                .iter()
+                .any(|binding| !binding.modifiers.contains(KeyModifiers::CONTROL));
+        if self
+            .filters
+            .mode
+            .contains_key(KeyCode::Char('c'), KeyModifiers::CONTROL)
+        {
+            bail!("filter mode binding conflicts with Ctrl-C");
+        }
+        if global_binding_conflicts(&self.filters.mode) || input_conflicts {
+            bail!("filter mode binding conflicts with input or a global binding");
+        }
+        if self
+            .filters
+            .clear
+            .contains_key(KeyCode::Esc, KeyModifiers::NONE)
+            || self
+                .filters
+                .clear
+                .contains_key(KeyCode::Char('c'), KeyModifiers::CONTROL)
+            || self.filters.clear.overlaps(&self.filters.mode)
+            || navigation_conflicts(&self.filters.clear)
+        {
+            bail!("filter clear binding conflicts with a reserved filter-mode key");
+        }
+        for choice in &self.filters.choices {
+            if choice.key.0.is_empty() {
+                bail!("filter choice key cannot be disabled");
+            }
+            if choice.label.trim().is_empty() || choice.source.trim().is_empty() {
+                bail!("filter choice label and source cannot be empty");
+            }
+            if choice.key.contains_key(KeyCode::Esc, KeyModifiers::NONE)
+                || choice
+                    .key
+                    .contains_key(KeyCode::Char('c'), KeyModifiers::CONTROL)
+                || choice.key.overlaps(&self.filters.mode)
+                || choice.key.overlaps(&self.filters.clear)
+                || navigation_conflicts(&choice.key)
+            {
+                bail!("filter choice key conflicts with a reserved filter-mode key");
+            }
+        }
+        for (index, choice) in self.filters.choices.iter().enumerate() {
+            if self.filters.choices[..index]
+                .iter()
+                .any(|other| choice.key.overlaps(&other.key))
+            {
+                bail!("filter choice keys must be unique");
+            }
+        }
         for token in &self.item.tokens {
             if token.name.trim().is_empty() || token.source.trim().is_empty() {
                 bail!("item token name and source cannot be empty");
@@ -439,6 +573,10 @@ mod tests {
         assert_eq!(config.search.title, "Vellum");
         assert_eq!(config.keybindings.accept.label(), "enter");
         assert_eq!(config.keybindings.down.0[1].label, "ctrl-n");
+        assert_eq!(config.filters.mode.label(), "ctrl-g");
+        assert_eq!(config.filters.clear.label(), "a");
+        assert_eq!(config.filters.label, "filter");
+        assert!(config.filters.choices.is_empty());
         assert!(config.input.vim);
         assert_eq!(config.input.start_mode, InputMode::Insert);
         assert_eq!(config.item.padding, 1);
@@ -566,6 +704,56 @@ mod tests {
 
         assert_eq!(config.search.title, "Files");
         assert_eq!(Config::parse(MINIMAL).unwrap().search.title, "Vellum");
+    }
+
+    #[test]
+    fn cfg_011_filter_configuration_parses_and_layers() {
+        let global = "[filters]\nlabel = 'state'\nmode = 'ctrl-x'\nclear = 'z'";
+        let palette = format!(
+            "{MINIMAL}\n{}",
+            r#"
+            [[filters.choices]]
+            key = "w"
+            label = "working"
+            source = "agent_status"
+            value = "working"
+            icon = "●"
+            fg = "blue"
+            "#
+        );
+
+        let config = Config::parse_layered(Some(global), &palette).unwrap();
+
+        assert_eq!(config.filters.mode.label(), "ctrl-x");
+        assert_eq!(config.filters.clear.label(), "z");
+        assert_eq!(config.filters.label, "state");
+        assert_eq!(config.filters.choices[0].key.label(), "w");
+        assert_eq!(config.filters.choices[0].label, "working");
+        assert_eq!(config.filters.choices[0].source, "agent_status");
+        assert_eq!(config.filters.choices[0].value, "working");
+        assert_eq!(config.filters.choices[0].icon, "●");
+        assert_eq!(config.filters.choices[0].fg.as_deref(), Some("blue"));
+
+        for key in ["ctrl-c", "ctrl-n", "esc", "ctrl-x"] {
+            let invalid = palette.replace("key = \"w\"", &format!("key = \"{key}\""));
+            assert!(
+                Config::parse_layered(Some(global), &invalid)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("conflicts")
+            );
+        }
+
+        for key in ["ctrl-c", "ctrl-f", "enter", "esc", "g"] {
+            let invalid_mode = global.replace("ctrl-x", key);
+            assert!(Config::parse_layered(Some(&invalid_mode), &palette).is_err());
+        }
+
+        let aliases = palette.replace(
+            "value = \"working\"",
+            "value = \"working\"\n\n[[filters.choices]]\nkey = \"escape\"\nlabel = \"one\"\nsource = \"state\"\nvalue = \"one\"\n\n[[filters.choices]]\nkey = \"esc\"\nlabel = \"two\"\nsource = \"state\"\nvalue = \"two\"",
+        );
+        assert!(Config::parse_layered(None, &aliases).is_err());
     }
 
     #[test]

@@ -73,3 +73,14 @@ Vellum SHALL redraw its interface when the terminal reports a new size.
 - GIVEN a running Vellum interface
 - WHEN Crossterm reports a terminal resize event
 - THEN Vellum marks the frame dirty so the next draw uses the new terminal area
+
+### Requirement: Show filter controls and state
+
+Vellum SHALL style the active filter beside the search title and show compact filter controls in the footer.
+
+#### Scenario: Footer reflects filter state {#UI-009}
+
+- GIVEN a palette with configured filters
+- WHEN the normal and filter-mode frames are drawn
+- THEN the active choice's icon, label, and color appear beside the search title
+- AND the footer identifies the filter binding outside filter mode and compactly lists the filter name and keys inside it

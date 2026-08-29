@@ -81,8 +81,20 @@ pub fn matching_indices_with_frecency(
     query: &str,
     frecency: &HashMap<String, FrecencyRank>,
 ) -> Vec<usize> {
+    matching_indices_with_frecency_by(items, query, frecency, |_| true)
+}
+
+pub fn matching_indices_with_frecency_by(
+    items: &[RenderedItem],
+    query: &str,
+    frecency: &HashMap<String, FrecencyRank>,
+    mut include: impl FnMut(usize) -> bool,
+) -> Vec<usize> {
     let mut matches: Vec<_> = if query.is_empty() {
-        (0..items.len()).map(|index| (index, 0)).collect()
+        (0..items.len())
+            .filter(|&index| include(index))
+            .map(|index| (index, 0))
+            .collect()
     } else {
         let pattern = Pattern::parse(
             query,
@@ -95,12 +107,18 @@ pub fn matching_indices_with_frecency(
             .iter()
             .enumerate()
             .filter_map(|(index, item)| {
+                if !include(index) {
+                    return None;
+                }
                 pattern
                     .score(Utf32Str::new(&item.search_text, &mut buffer), &mut matcher)
                     .map(|score| (index, score))
             })
             .collect()
     };
+    if query.is_empty() && frecency.is_empty() {
+        return matches.into_iter().map(|(index, _)| index).collect();
+    }
     matches.sort_unstable_by(|&(left_index, left_match), &(right_index, right_match)| {
         let left = frecency.get(&items[left_index].value);
         let right = frecency.get(&items[right_index].value);
@@ -204,12 +222,27 @@ fn resolve(item: &Map<String, Value>, expression: &str) -> String {
         .map_or_else(|| expression.to_owned(), |name| field(item, name))
 }
 
-fn field(item: &Map<String, Value>, path: &str) -> String {
+pub(crate) fn field_value<'a>(item: &'a Map<String, Value>, path: &str) -> Option<&'a Value> {
     let path = path.strip_prefix('$').unwrap_or(path);
-    let mut value = path.split('.').next().and_then(|key| item.get(key));
-    for key in path.split('.').skip(1) {
+    let mut parts = path.split('.');
+    let mut value = parts.next().and_then(|key| item.get(key));
+    for key in parts {
         value = value.and_then(|value| value.get(key));
     }
+    value
+}
+
+pub(crate) fn field_value_at<'a>(item: &'a Map<String, Value>, path: &[&str]) -> Option<&'a Value> {
+    let mut parts = path.iter();
+    let mut value = parts.next().and_then(|key| item.get(*key));
+    for key in parts {
+        value = value.and_then(|value| value.get(*key));
+    }
+    value
+}
+
+fn field(item: &Map<String, Value>, path: &str) -> String {
+    let value = field_value(item, path);
     match value {
         Some(Value::String(value)) => value.clone(),
         Some(Value::Null) | None => String::new(),

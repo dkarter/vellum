@@ -124,7 +124,7 @@ mod tests {
         app::App,
         builtins,
         config::{Config, SegmentConfig},
-        item::render_item,
+        item::{field_value, render_item},
         ui,
     };
 
@@ -273,6 +273,36 @@ mod tests {
     }
 
     #[test]
+    fn pal_014_agent_palette_filters_by_lifecycle_state() {
+        let palette = PALETTES
+            .iter()
+            .find(|palette| palette.name == "herdr-agents")
+            .unwrap();
+        let config = Config::parse(palette.contents).unwrap();
+
+        assert_eq!(config.filters.mode.label(), "ctrl-g");
+        assert_eq!(config.filters.clear.label(), "a");
+        assert_eq!(config.filters.label, "status");
+        assert_eq!(
+            config
+                .filters
+                .choices
+                .iter()
+                .map(|choice| (choice.key.label(), choice.value.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("w", "working"),
+                ("d", "done"),
+                ("i", "idle"),
+                ("b", "blocked"),
+                ("u", "unknown"),
+            ]
+        );
+        assert_eq!(config.filters.choices[0].icon, "●");
+        assert_eq!(config.filters.choices[0].fg.as_deref(), Some("#7aa2f7"));
+    }
+
+    #[test]
     fn pal_011_file_palette_uses_a_compact_path_layout() {
         let palette = PALETTES
             .iter()
@@ -346,6 +376,7 @@ mod tests {
             vec![item],
             config.item.clone(),
             config.keybindings.clone(),
+            config.filters.clone(),
             config.input.clone(),
             config.search.enabled,
         );
@@ -385,6 +416,13 @@ mod tests {
             assert!(
                 derived || item.contains_key(field),
                 "{name} references missing source field {field}"
+            );
+        }
+        for choice in &config.filters.choices {
+            assert!(
+                field_value(item, &choice.source).is_some(),
+                "{name} filter references missing source field {}",
+                choice.source
             );
         }
     }
