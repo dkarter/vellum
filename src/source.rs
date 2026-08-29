@@ -23,11 +23,15 @@ pub fn run(source: &SourceConfig) -> Result<Vec<SourceItem>> {
 }
 
 pub(crate) fn command_output(command: &mut Command, label: &str) -> Result<String> {
-    let output = command
-        .output()
-        .with_context(|| format!("failed to run {label}"))?;
+    let output = run_command(command, label)?;
     ensure_success(label, &output)?;
     String::from_utf8(output.stdout).with_context(|| format!("{label} output is not UTF-8"))
+}
+
+pub(crate) fn run_command(command: &mut Command, label: &str) -> Result<Output> {
+    command
+        .output()
+        .with_context(|| format!("failed to run {label}"))
 }
 
 pub(crate) fn ensure_success(label: &str, output: &Output) -> Result<()> {

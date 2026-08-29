@@ -1,0 +1,58 @@
+#:schema ../schemas/vellum.schema.json
+
+[search]
+title = "Action Playground"
+placeholder = "Choose a sample item..."
+
+[source]
+cmd = """printf '%s\n' '[{"id":"alpha","name":"Alpha project","ready":true},{"id":"beta","name":"Beta project","ready":false}]'"""
+
+[actions]
+default = "select"
+menu = "ctrl-a"
+
+[[actions.items]]
+name = "select"
+label = "Select item"
+icon = "✓"
+description = "Exit successfully without writing selection output"
+command = ["true"]
+on_success = "exit"
+
+[[actions.items]]
+name = "refresh"
+label = "Refresh source"
+icon = "↻"
+description = "Rerun the source and keep the palette open"
+key = "ctrl-r"
+command = ["true"]
+on_success = "refresh"
+
+[[actions.items]]
+name = "ready-check"
+label = "Ready-only action"
+icon = "●"
+description = "Only available when the selected item's ready field is true"
+command = ["true"]
+when = [{ field = "ready", equals = true }]
+on_success = "refresh"
+
+[[actions.items]]
+name = "failure"
+label = "Show an error"
+icon = "!"
+description = "Fail intentionally and display stderr in the footer"
+key = "ctrl-x"
+shell = "printf 'Example action failed intentionally\\n' >&2; exit 7"
+on_success = "refresh"
+
+[item]
+value = "$id"
+template = [["$name"], ["ready: ", "$ready"]]
+
+[theme]
+foreground = "white"
+background = "black"
+selection_foreground = "black"
+selection_background = "cyan"
+border = "dark_gray"

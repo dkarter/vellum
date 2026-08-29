@@ -1,21 +1,42 @@
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    time::{Duration, Instant},
+};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use nucleo_matcher::{Config as MatcherConfig, Matcher, Utf32Str, pattern::Pattern};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
+    action::{AvailabilityCommand, prepare_availability},
     config::{
-        Bindings, FilterChoice, FilterConfig, InputConfig, InputMode, ItemConfig, Keybindings,
+        ActionsConfig, Bindings, FilterChoice, FilterConfig, InputConfig, InputMode, ItemConfig,
+        Keybindings,
     },
     frecency::FrecencyRank,
     item::{RenderedItem, field_value_at, matching_indices_with_frecency_by, render_items},
     source::SourceItem,
 };
 
+#[derive(Debug)]
+struct CachedAvailability {
+    available: bool,
+    checked_at: Instant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ActionAvailabilityState {
+    Available,
+    Pending,
+    Unavailable,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
     Running,
     Accepted(String),
+    ActionRequested(usize),
+    ActionCompleted,
     Cancelled,
 }
 
@@ -25,6 +46,11 @@ pub struct App {
     keybindings: Keybindings,
     filter_config: FilterConfig,
     input_config: InputConfig,
+    action_config: ActionsConfig,
+    availability_cache: HashMap<AvailabilityCommand, CachedAvailability>,
+    availability_in_flight: HashSet<AvailabilityCommand>,
+    availability_queue: Vec<AvailabilityCommand>,
+    pending_action: Option<(usize, SourceItem)>,
     search_enabled: bool,
     source_items: Vec<SourceItem>,
     frecency_scores: HashMap<String, FrecencyRank>,
@@ -34,6 +60,11 @@ pub struct App {
     pub cursor: usize,
     pub input_mode: InputMode,
     pub filter_mode: bool,
+    pub action_menu: bool,
+    pub action_selected: usize,
+    pub action_query: String,
+    pub action_cursor: usize,
+    pub status: Option<String>,
     active_filter: Option<usize>,
     pub selected: usize,
     pub outcome: Outcome,
@@ -68,11 +99,39 @@ impl App {
         search_enabled: bool,
         frecency_scores: HashMap<String, FrecencyRank>,
     ) -> Self {
+        Self::new_with_frecency_and_actions(
+            source_items,
+            item_config,
+            keybindings,
+            filter_config,
+            input_config,
+            search_enabled,
+            frecency_scores,
+            ActionsConfig::default(),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_frecency_and_actions(
+        source_items: Vec<SourceItem>,
+        item_config: ItemConfig,
+        keybindings: Keybindings,
+        filter_config: FilterConfig,
+        input_config: InputConfig,
+        search_enabled: bool,
+        frecency_scores: HashMap<String, FrecencyRank>,
+        action_config: ActionsConfig,
+    ) -> Self {
         let items = render_items(&source_items, &item_config, 0);
         let mut app = Self {
             item_config,
             keybindings,
             filter_config,
+            action_config,
+            availability_cache: HashMap::new(),
+            availability_in_flight: HashSet::new(),
+            availability_queue: Vec::new(),
+            pending_action: None,
             search_enabled,
             source_items,
             frecency_scores,
@@ -87,6 +146,11 @@ impl App {
             },
             input_config,
             filter_mode: false,
+            action_menu: false,
+            action_selected: 0,
+            action_query: String::new(),
+            action_cursor: 0,
+            status: None,
             active_filter: None,
             selected: 0,
             outcome: Outcome::Running,
@@ -100,6 +164,27 @@ impl App {
             && key.modifiers.contains(KeyModifiers::CONTROL)
         {
             self.outcome = Outcome::Cancelled;
+            return;
+        }
+        if self.action_menu {
+            if key.code == KeyCode::Esc {
+                self.action_menu = false;
+            } else if self.bindings_match(key, &self.keybindings.down) {
+                self.move_action_down();
+            } else if self.bindings_match(key, &self.keybindings.up) {
+                self.action_selected = self.action_selected.saturating_sub(1);
+            } else if self.bindings_match(key, &self.keybindings.accept) {
+                if let Some(index) = self
+                    .matching_action_indices()
+                    .get(self.action_selected)
+                    .copied()
+                {
+                    self.action_menu = false;
+                    self.request_action(index);
+                }
+            } else {
+                self.handle_action_query_key(key);
+            }
             return;
         }
         if self.filter_mode {
@@ -124,8 +209,38 @@ impl App {
             }
             return;
         }
+        if self.keybindings.enabled
+            && let Some(index) = self
+                .action_config
+                .items
+                .iter()
+                .enumerate()
+                .find(|(index, action)| {
+                    action.key.matches(key) && self.action_statically_available(*index)
+                })
+                .map(|(index, _)| index)
+        {
+            self.request_action(index);
+            return;
+        }
         if !self.filter_config.choices.is_empty() && self.filter_config.mode.matches(key) {
             self.filter_mode = true;
+            return;
+        }
+        if self.keybindings.enabled && self.action_config.menu.matches(key) {
+            if !self.has_potential_actions() {
+                return;
+            }
+            self.queue_availability_checks();
+            let available_actions = self.available_action_indices();
+            self.action_selected = self
+                .action_config
+                .default_index()
+                .and_then(|default| available_actions.iter().position(|index| *index == default))
+                .unwrap_or(0);
+            self.action_query.clear();
+            self.action_cursor = 0;
+            self.action_menu = true;
             return;
         }
         if key.code == KeyCode::Esc && self.input_config.vim {
@@ -140,7 +255,9 @@ impl App {
         if self.bindings_match(key, &self.keybindings.cancel) {
             self.outcome = Outcome::Cancelled;
         } else if self.bindings_match(key, &self.keybindings.accept) {
-            if let Some(item) = self.selected_item() {
+            if let Some(index) = self.action_config.default_index() {
+                self.request_action(index);
+            } else if let Some(item) = self.selected_item() {
                 self.outcome = Outcome::Accepted(item.value.clone());
             }
         } else if self.bindings_match(key, &self.keybindings.down) {
@@ -180,17 +297,43 @@ impl App {
             return false;
         }
         let selected_value = self.selected_item().map(|item| item.value.clone());
+        let selected_action = self
+            .action_menu
+            .then(|| {
+                self.matching_action_indices()
+                    .get(self.action_selected)
+                    .copied()
+            })
+            .flatten();
         self.source_items = source_items;
         self.items = render_items(&self.source_items, &self.item_config, elapsed_ms);
         self.visible = self.matching_indices();
-        self.selected = selected_value
-            .and_then(|value| {
-                self.visible
-                    .iter()
-                    .position(|&index| self.items[index].value == value)
-            })
-            .unwrap_or(0);
+        let previous_position = self.selected;
+        let restored_position = selected_value.as_ref().and_then(|value| {
+            self.visible
+                .iter()
+                .position(|&index| self.items[index].value == *value)
+        });
+        self.selected = restored_position.unwrap_or(previous_position);
         self.clamp_selection();
+        if self.action_menu {
+            let matching = self.matching_action_indices();
+            let restored_action = selected_action
+                .and_then(|action| matching.iter().position(|index| *index == action));
+            if restored_position.is_none() {
+                self.action_menu = false;
+            } else if selected_action.is_none() {
+                self.action_selected = 0;
+            } else if let Some(position) = restored_action {
+                self.action_selected = position;
+            } else if selected_action.is_some_and(|index| {
+                self.action_availability(index) == ActionAvailabilityState::Pending
+            }) {
+                self.action_selected = self.action_selected.min(matching.len().saturating_sub(1));
+            } else {
+                self.action_menu = false;
+            }
+        }
         true
     }
 
@@ -198,6 +341,145 @@ impl App {
         self.visible
             .get(self.selected)
             .and_then(|&index| self.items.get(index))
+    }
+
+    pub fn selected_source_item(&self) -> Option<&SourceItem> {
+        self.visible
+            .get(self.selected)
+            .and_then(|&index| self.source_items.get(index))
+    }
+
+    pub fn finish_action(&mut self, error: Option<String>) {
+        self.outcome = Outcome::Running;
+        self.status = error;
+    }
+
+    pub fn take_availability_checks(&mut self) -> Vec<AvailabilityCommand> {
+        if self.action_menu || self.pending_action.is_some() {
+            self.queue_availability_checks();
+        }
+        std::mem::take(&mut self.availability_queue)
+    }
+
+    pub fn finish_availability_check(&mut self, check: AvailabilityCommand, available: bool) {
+        let selected_action = self
+            .action_menu
+            .then(|| {
+                self.matching_action_indices()
+                    .get(self.action_selected)
+                    .copied()
+            })
+            .flatten();
+        self.availability_in_flight.remove(&check);
+        self.availability_cache.insert(
+            check,
+            CachedAvailability {
+                available,
+                checked_at: Instant::now(),
+            },
+        );
+        let matching = self.matching_action_indices();
+        self.action_selected = selected_action
+            .and_then(|index| matching.iter().position(|candidate| *candidate == index))
+            .unwrap_or_else(|| self.action_selected.min(matching.len().saturating_sub(1)));
+
+        if let Some((index, item)) = self.pending_action.clone() {
+            if self.selected_source_item() != Some(&item) {
+                self.pending_action = None;
+            } else {
+                match self.action_availability(index) {
+                    ActionAvailabilityState::Available => {
+                        self.pending_action = None;
+                        self.outcome = Outcome::ActionRequested(index);
+                    }
+                    ActionAvailabilityState::Unavailable => self.pending_action = None,
+                    ActionAvailabilityState::Pending => {}
+                }
+            }
+        }
+    }
+
+    pub fn invalidate_availability(&mut self) {
+        self.availability_cache.clear();
+        self.availability_in_flight.clear();
+        self.availability_queue.clear();
+        self.pending_action = None;
+    }
+
+    pub fn available_action_indices(&self) -> Vec<usize> {
+        self.action_config
+            .items
+            .iter()
+            .enumerate()
+            .filter_map(|(index, _)| {
+                (self.action_availability(index) == ActionAvailabilityState::Available)
+                    .then_some(index)
+            })
+            .collect()
+    }
+
+    pub fn has_potential_actions(&self) -> bool {
+        self.action_config
+            .items
+            .iter()
+            .enumerate()
+            .any(|(index, _)| {
+                self.action_availability(index) != ActionAvailabilityState::Unavailable
+            })
+    }
+
+    pub fn has_pending_actions(&self) -> bool {
+        self.action_config
+            .items
+            .iter()
+            .enumerate()
+            .any(|(index, _)| self.action_availability(index) == ActionAvailabilityState::Pending)
+    }
+
+    pub fn availability_refresh_in(&self) -> Option<Duration> {
+        self.action_menu.then_some(())?;
+        self.action_config
+            .items
+            .iter()
+            .filter_map(|action| {
+                let item = self.selected_source_item()?;
+                action.is_available(item).then_some(())?;
+                let availability = action.availability.as_ref()?;
+                let check = prepare_availability(availability, item).ok()?;
+                (!self.availability_in_flight.contains(&check)).then_some(())?;
+                let cached = self.availability_cache.get(&check)?;
+                Some(
+                    Duration::from_millis(availability.cache_ms)
+                        .saturating_sub(cached.checked_at.elapsed()),
+                )
+            })
+            .min()
+    }
+
+    pub fn matching_action_indices(&self) -> Vec<usize> {
+        let available = self.available_action_indices();
+        if self.action_query.is_empty() {
+            return available;
+        }
+        let pattern = Pattern::parse(
+            &self.action_query,
+            nucleo_matcher::pattern::CaseMatching::Smart,
+            nucleo_matcher::pattern::Normalization::Smart,
+        );
+        let mut matcher = Matcher::new(MatcherConfig::DEFAULT);
+        let mut buffer = Vec::new();
+        let mut matches: Vec<_> = available
+            .into_iter()
+            .filter_map(|index| {
+                let action = &self.action_config.items[index];
+                let text = format!("{} {} {}", action.name, action.label, action.description);
+                pattern
+                    .score(Utf32Str::new(&text, &mut buffer), &mut matcher)
+                    .map(|score| (index, score))
+            })
+            .collect();
+        matches.sort_unstable_by(|left, right| right.1.cmp(&left.1).then(left.0.cmp(&right.0)));
+        matches.into_iter().map(|(index, _)| index).collect()
     }
 
     pub fn active_filter(&self) -> Option<&FilterChoice> {
@@ -213,6 +495,155 @@ impl App {
 
     fn move_up(&mut self) {
         self.selected = self.selected.saturating_sub(1);
+    }
+
+    fn move_action_down(&mut self) {
+        self.action_selected =
+            (self.action_selected + 1).min(self.matching_action_indices().len().saturating_sub(1));
+    }
+
+    fn handle_action_query_key(&mut self, key: KeyEvent) {
+        let changed = match key.code {
+            KeyCode::Char(character)
+                if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT =>
+            {
+                self.action_query.insert(self.action_cursor, character);
+                self.action_cursor += character.len_utf8();
+                true
+            }
+            KeyCode::Backspace if self.action_cursor > 0 => {
+                let start = previous_boundary(&self.action_query, self.action_cursor);
+                self.action_query
+                    .replace_range(start..self.action_cursor, "");
+                self.action_cursor = start;
+                true
+            }
+            KeyCode::Delete if self.action_cursor < self.action_query.len() => {
+                let end = next_boundary(&self.action_query, self.action_cursor);
+                self.action_query.replace_range(self.action_cursor..end, "");
+                true
+            }
+            KeyCode::Left => {
+                self.action_cursor = previous_boundary(&self.action_query, self.action_cursor);
+                false
+            }
+            KeyCode::Right => {
+                self.action_cursor = next_boundary(&self.action_query, self.action_cursor);
+                false
+            }
+            _ => false,
+        };
+        if changed {
+            self.action_selected = 0;
+        }
+    }
+
+    fn request_action(&mut self, index: usize) {
+        match self.action_availability(index) {
+            ActionAvailabilityState::Available => self.outcome = Outcome::ActionRequested(index),
+            ActionAvailabilityState::Pending => {
+                if let Some(item) = self.selected_source_item().cloned() {
+                    self.pending_action = Some((index, item));
+                    self.queue_availability_checks();
+                }
+            }
+            ActionAvailabilityState::Unavailable => {}
+        }
+    }
+
+    fn action_statically_available(&self, index: usize) -> bool {
+        self.action_config
+            .items
+            .get(index)
+            .zip(self.selected_source_item())
+            .is_some_and(|(action, item)| action.is_available(item))
+    }
+
+    fn action_availability(&self, index: usize) -> ActionAvailabilityState {
+        let Some((action, item)) = self
+            .action_config
+            .items
+            .get(index)
+            .zip(self.selected_source_item())
+        else {
+            return ActionAvailabilityState::Unavailable;
+        };
+        if !action.is_available(item) {
+            return ActionAvailabilityState::Unavailable;
+        }
+        let Some(availability) = &action.availability else {
+            return ActionAvailabilityState::Available;
+        };
+        let Ok(check) = prepare_availability(availability, item) else {
+            return ActionAvailabilityState::Unavailable;
+        };
+        match self.cached_availability(&check, availability.cache_ms) {
+            Some(true) => ActionAvailabilityState::Available,
+            Some(false) => ActionAvailabilityState::Unavailable,
+            None => ActionAvailabilityState::Pending,
+        }
+    }
+
+    fn queue_availability_checks(&mut self) {
+        let active_checks = self
+            .selected_source_item()
+            .into_iter()
+            .flat_map(|item| {
+                self.action_config.items.iter().filter_map(|action| {
+                    action
+                        .is_available(item)
+                        .then_some(action.availability.as_ref())
+                        .flatten()
+                        .and_then(|availability| prepare_availability(availability, item).ok())
+                })
+            })
+            .collect::<HashSet<_>>();
+        while self.availability_cache.len() > 256 {
+            let Some(oldest) = self
+                .availability_cache
+                .iter()
+                .filter(|(check, _)| !active_checks.contains(*check))
+                .min_by_key(|(_, cached)| cached.checked_at)
+                .map(|(check, _)| check.clone())
+            else {
+                break;
+            };
+            self.availability_cache.remove(&oldest);
+        }
+        let checks = self
+            .selected_source_item()
+            .into_iter()
+            .flat_map(|item| {
+                self.action_config
+                    .items
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, action)| {
+                        (self.action_availability(index) == ActionAvailabilityState::Pending)
+                            .then_some(action.availability.as_ref())
+                            .flatten()
+                            .and_then(|availability| {
+                                prepare_availability(availability, item)
+                                    .ok()
+                                    .map(|check| (check, availability.cache_ms))
+                            })
+                    })
+            })
+            .collect::<Vec<_>>();
+        for (check, cache_ms) in checks {
+            if self.cached_availability(&check, cache_ms).is_none()
+                && self.availability_in_flight.insert(check.clone())
+            {
+                self.availability_queue.push(check);
+            }
+        }
+    }
+
+    fn cached_availability(&self, check: &AvailabilityCommand, cache_ms: u64) -> Option<bool> {
+        self.availability_cache.get(check).and_then(|cached| {
+            (cached.checked_at.elapsed() < Duration::from_millis(cache_ms))
+                .then_some(cached.available)
+        })
     }
 
     fn refilter(&mut self) {
@@ -431,6 +862,34 @@ mod tests {
         )
     }
 
+    fn app_with_actions() -> App {
+        let mut app = app();
+        app.action_config = toml::from_str(
+            r#"
+            default = "open"
+            menu = "ctrl-a"
+
+            [[items]]
+            name = "open"
+            label = "Open"
+            icon = "→"
+            description = "View this item"
+            command = ["tool", "open", "$id"]
+
+            [[items]]
+            name = "remove"
+            label = "Remove"
+            icon = "!"
+            description = "Delete this item"
+            key = "ctrl-r"
+            command = ["tool", "remove", "$id"]
+            on_success = "refresh"
+            "#,
+        )
+        .unwrap();
+        app
+    }
+
     #[test]
     fn sea_002_filters_navigates_and_accepts() {
         let mut app = app();
@@ -439,6 +898,192 @@ mod tests {
         assert_eq!(app.visible, [1]);
         app.handle_key(KeyEvent::from(KeyCode::Enter));
         assert_eq!(app.outcome, Outcome::Accepted("2".into()));
+    }
+
+    #[test]
+    fn act_002_enter_remains_selection_output_without_a_default_action() {
+        let mut app = app();
+
+        app.handle_key(KeyEvent::from(KeyCode::Enter));
+
+        assert_eq!(app.outcome, Outcome::Accepted("1".into()));
+    }
+
+    #[test]
+    fn act_003_default_and_direct_keys_request_actions() {
+        let mut app = app_with_actions();
+
+        app.handle_key(KeyEvent::from(KeyCode::Enter));
+        assert_eq!(app.outcome, Outcome::ActionRequested(0));
+
+        app.finish_action(None);
+        app.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL));
+        assert_eq!(app.outcome, Outcome::ActionRequested(1));
+    }
+
+    #[test]
+    fn act_004_quick_action_menu_navigates_and_selects() {
+        let mut app = app_with_actions();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        assert!(app.action_menu);
+        app.handle_key(KeyEvent::from(KeyCode::Down));
+        app.handle_key(KeyEvent::from(KeyCode::Enter));
+        assert_eq!(app.outcome, Outcome::ActionRequested(1));
+
+        app.finish_action(None);
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::from(KeyCode::Esc));
+        assert!(!app.action_menu);
+        assert_eq!(app.outcome, Outcome::Running);
+    }
+
+    #[test]
+    fn act_009_quick_action_menu_fuzzy_filters_metadata() {
+        let mut app = app_with_actions();
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        for character in "dlt".chars() {
+            app.handle_key(KeyEvent::from(KeyCode::Char(character)));
+        }
+
+        assert_eq!(app.action_query, "dlt");
+        assert_eq!(app.matching_action_indices(), [1]);
+        app.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
+        assert_eq!(app.action_selected, 0);
+        app.handle_key(KeyEvent::from(KeyCode::Enter));
+        assert_eq!(app.outcome, Outcome::ActionRequested(1));
+    }
+
+    #[test]
+    fn act_011_command_gated_actions_resolve_asynchronously_and_share_cached_results() {
+        let mut app = app();
+        app.action_config = toml::from_str(
+            r#"
+            menu = "ctrl-a"
+
+            [[items]]
+            name = "pr"
+            label = "Open PR"
+            command = ["true"]
+            availability = { command = ["test", "-n", "$id"], cache_ms = 30000 }
+
+            [[items]]
+            name = "checks"
+            label = "Open checks"
+            command = ["true"]
+            availability = { command = ["test", "-n", "$id"], cache_ms = 30000 }
+            "#,
+        )
+        .unwrap();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+
+        assert!(app.action_menu);
+        assert!(app.matching_action_indices().is_empty());
+        assert!(app.has_pending_actions());
+        let checks = app.take_availability_checks();
+        assert_eq!(checks.len(), 1);
+
+        app.finish_availability_check(checks[0].clone(), true);
+
+        assert_eq!(app.matching_action_indices(), [0, 1]);
+        assert!(!app.has_pending_actions());
+        app.action_menu = false;
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        assert!(app.take_availability_checks().is_empty());
+
+        app.availability_cache
+            .get_mut(&checks[0])
+            .unwrap()
+            .checked_at = Instant::now() - Duration::from_secs(31);
+        app.action_menu = false;
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        let checks = app.take_availability_checks();
+        assert_eq!(checks.len(), 1);
+        app.finish_availability_check(checks[0].clone(), false);
+        assert!(app.matching_action_indices().is_empty());
+        assert!(!app.has_potential_actions());
+    }
+
+    #[test]
+    fn act_011_async_results_preserve_the_highlighted_action() {
+        let mut app = app();
+        app.action_config = toml::from_str(
+            r#"
+            menu = "ctrl-a"
+
+            [[items]]
+            name = "gated"
+            label = "Gated"
+            command = ["true"]
+            availability = { command = ["true"] }
+
+            [[items]]
+            name = "visible"
+            label = "Visible"
+            command = ["true"]
+            "#,
+        )
+        .unwrap();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        assert_eq!(app.matching_action_indices(), [1]);
+        let check = app.take_availability_checks().remove(0);
+
+        app.finish_availability_check(check, true);
+
+        assert_eq!(app.matching_action_indices(), [0, 1]);
+        assert_eq!(app.action_selected, 1);
+    }
+
+    #[test]
+    fn act_003_act_011_direct_gated_action_waits_for_its_probe() {
+        let mut app = app();
+        app.action_config = toml::from_str(
+            r#"
+            [[items]]
+            name = "gated"
+            label = "Gated"
+            key = "ctrl-r"
+            command = ["true"]
+            availability = { command = ["true"] }
+            "#,
+        )
+        .unwrap();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL));
+
+        assert_eq!(app.outcome, Outcome::Running);
+        let check = app.take_availability_checks().remove(0);
+        app.finish_availability_check(check, true);
+        assert_eq!(app.outcome, Outcome::ActionRequested(0));
+    }
+
+    #[test]
+    fn act_011_menu_eligibility_checks_every_action() {
+        let mut app = app();
+        app.action_config = toml::from_str(
+            r#"
+            menu = "ctrl-a"
+
+            [[items]]
+            name = "hidden"
+            label = "Hidden"
+            command = ["true"]
+            when = [{ field = "missing", is_set = true }]
+
+            [[items]]
+            name = "visible"
+            label = "Visible"
+            command = ["true"]
+            "#,
+        )
+        .unwrap();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+
+        assert!(app.action_menu);
+        assert_eq!(app.matching_action_indices(), [1]);
     }
 
     #[test]
@@ -503,6 +1148,117 @@ mod tests {
         );
 
         assert_eq!(app.selected_item().unwrap().value, "2");
+    }
+
+    #[test]
+    fn act_007_refresh_preserves_query_and_selected_identity() {
+        let mut app = app();
+        app.query = "a".into();
+        app.cursor = 1;
+        app.refilter();
+        app.selected = 1;
+        let replacement = json!([
+            { "id": "2", "name": "Beta updated" },
+            { "id": "1", "name": "Alpha" }
+        ]);
+
+        app.replace_source(
+            replacement
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item.as_object().unwrap().clone())
+                .collect(),
+            0,
+        );
+
+        assert_eq!(app.query, "a");
+        assert_eq!(app.selected_item().unwrap().value, "2");
+    }
+
+    #[test]
+    fn act_008_refresh_selects_nearby_item_after_deletion() {
+        let mut app = app();
+        app.source_items.push(
+            json!({"id": "3", "name": "Gamma"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
+        app.tick(0);
+        app.selected = 1;
+        let replacement = json!([
+            { "id": "1", "name": "Alpha" },
+            { "id": "3", "name": "Gamma" }
+        ]);
+
+        app.replace_source(
+            replacement
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item.as_object().unwrap().clone())
+                .collect(),
+            0,
+        );
+
+        assert_eq!(app.selected, 1);
+        assert_eq!(app.selected_item().unwrap().value, "3");
+    }
+
+    #[test]
+    fn act_008_refresh_closes_action_menu_when_selected_item_is_deleted() {
+        let mut app = app_with_actions();
+        app.selected = 1;
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        assert!(app.action_menu);
+        let replacement = json!([{ "id": "1", "name": "Alpha" }]);
+
+        app.replace_source(
+            replacement
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item.as_object().unwrap().clone())
+                .collect(),
+            0,
+        );
+
+        assert!(!app.action_menu);
+        assert_eq!(app.selected_item().unwrap().value, "1");
+    }
+
+    #[test]
+    fn act_007_refresh_preserves_highlighted_action_identity() {
+        let mut app = app_with_actions();
+        app.source_items[0].insert("ready".into(), json!(true));
+        app.action_config.items[0].when = vec![crate::config::ActionCondition {
+            field: "ready".into(),
+            equals: Some(json!(true)),
+            is_set: None,
+        }];
+        app.tick(0);
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::from(KeyCode::Down));
+        assert_eq!(app.action_selected, 1);
+        let replacement = json!([
+            { "id": "1", "name": "Alpha", "ready": false },
+            { "id": "2", "name": "Beta" }
+        ]);
+
+        app.replace_source(
+            replacement
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item.as_object().unwrap().clone())
+                .collect(),
+            0,
+        );
+
+        assert!(app.action_menu);
+        assert_eq!(app.action_selected, 0);
+        assert_eq!(app.matching_action_indices(), [1]);
     }
 
     #[test]

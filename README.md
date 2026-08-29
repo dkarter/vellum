@@ -13,9 +13,9 @@ focus on fully customizable multi-line items and live data.
 
 Vellum is an early implementation. It supports command-backed JSON sources,
 fuzzy search, custom multi-line templates, conditional and animated tokens,
-themes, keybindings, and periodic live refresh. Herdr is the first intended
-integration; output is deliberately generic so other multiplexers can consume
-it too.
+themes, keybindings, generic selection actions, and periodic live refresh.
+Herdr is the first intended integration, but sources, actions, and output are
+deliberately generic.
 
 ## Install
 
@@ -67,20 +67,33 @@ vellum palettes sync --overwrite
 
 The library includes these palettes:
 
-| Palette            | Dependency           | Selection value     |
-| ------------------ | -------------------- | ------------------- |
-| `herdr-workspaces` | `herdr`              | Herdr workspace ID  |
-| `herdr-agents`     | `herdr`              | Herdr agent pane ID |
-| `files`            | `fd` and a Nerd Font | File path           |
+| Palette            | Dependency           | Enter behavior       |
+| ------------------ | -------------------- | -------------------- |
+| `herdr-workspaces` | `herdr`, `hwt`, `gh` | Focus workspace      |
+| `herdr-agents`     | `herdr`              | Output agent pane ID |
+| `files`            | `fd` and a Nerd Font | Output file path     |
 
-The Herdr palettes use the installed CLI's `herdr api snapshot` JSON and refresh
-live agent state. The file palette runs `fd` directly and applies a compact
-filetype icon map adapted from Snacks.nvim's `nvim-web-devicons` fallback.
+The Herdr palettes use the installed CLI's `herdr api snapshot` JSON, refresh
+live agent state, and filter working, done, idle, blocked, or unknown entries
+with Ctrl-G. Their status circles and colors match Herdr. Workspace checkout
+paths under the current home directory are displayed relative to `~`. The file
+palette runs `fd` directly and applies a compact filetype icon map adapted from
+Snacks.nvim's `nvim-web-devicons` fallback.
 
-Quote the selected value when passing it to another command:
+The workspace palette focuses on Enter. Ctrl-A opens its action menu. A selected
+HWT worktree can be removed and the choices refreshed without leaving Vellum.
+Any workspace with a checkout path can be opened on GitHub at its repository,
+pull request, or pull-request checks. The pull-request actions appear only when
+the checkout branch has a pull request:
 
 ```sh
-workspace_id="$(vellum herdr-workspaces)" && herdr workspace focus "$workspace_id"
+vellum herdr-workspaces
+```
+
+Output-only palettes can be composed with other commands. Quote the selected
+value:
+
+```sh
 pane_id="$(vellum herdr-agents)" && herdr agent focus "$pane_id"
 file="$(vellum files)" && "${EDITOR:-vi}" -- "$file"
 ```
@@ -89,8 +102,11 @@ Optional global defaults live at `$XDG_CONFIG_HOME/vellum/config.toml`. Vellum
 recursively merges the selected palette over those defaults. A palette can
 therefore override one setting without repeating the rest of a global section.
 
-Vellum writes the selected item's configured value to stdout. Cancellation
-writes nothing, making quoted shell integration straightforward.
+For output-only selection, Vellum writes the selected item's configured value
+and one newline to stdout. The interactive interface, cursor controls,
+restoration, and diagnostics all use stderr. Cancellation and successful native
+actions write nothing to stdout, so command substitution and pipelines never
+receive terminal control sequences.
 
 ## Source Format
 
@@ -172,6 +188,24 @@ start_mode = "insert"
 [frecency]
 enabled = true
 max_entries = 1000
+
+[actions]
+default = "open"
+menu = "ctrl-a"
+
+[[actions.items]]
+name = "open"
+label = "Open item"
+command = ["my-tool", "open", "$agent_id"]
+on_success = "exit"
+
+[[actions.items]]
+name = "remove"
+label = "Remove item"
+key = "ctrl-r"
+command = ["my-tool", "remove", "--id", "$agent_id"]
+when = [{ field = "removable", equals = true }]
+on_success = "refresh"
 
 [item]
 border = false
@@ -257,13 +291,98 @@ Colors accept Ratatui names such as `cyan`, `dark_gray`, and `reset`, or RGB hex
 values such as `#7aa2f7`. A color beginning with `$` reads its value from the
 source item, allowing live state-dependent colors.
 
+## Actions
+
+Actions are generic palette commands. Each action has a unique `name`, display
+`label`, optional `icon` and `description`, one command form, and an `on_success`
+policy. Labels, descriptions, and action names are fuzzy-searchable in the
+quick-action menu. `command` is an argv array executed directly, never through a
+shell. An argument consisting entirely of a field expression such as `$id` or
+`$metadata.id` is replaced with that selected item field as one literal
+argument. Strings with spaces or shell metacharacters therefore remain one
+argument and cannot become shell syntax. Missing, null, array, and object fields
+fail safely and leave Vellum open.
+
+Set `cwd` to run an action from a literal directory or a selected scalar field.
+Vellum resolves the field and passes it directly to the child process without a
+shell:
+
+```toml
+cwd = "$checkout_path"
+command = ["gh", "pr", "view", "--web"]
+```
+
+Optional `when` conditions keep an action out of direct dispatch and the menu
+unless every condition matches the selected item. Use `equals` for an exact
+scalar comparison, or `is_set = true` to require a present, non-null field:
+
+```toml
+when = [
+  { field = "focused", equals = false },
+  { field = "worktree", is_set = true },
+]
+```
+
+Set `availability` to gate an action on a side-effect-free argv command. Vellum
+opens the menu immediately, runs uncached probes on a background thread, and
+keeps the action hidden until the probe exits successfully. Probe stdin, stdout,
+and stderr are disconnected. Equivalent interpolated commands, working
+directories, and timeout policies share both successful and unsuccessful results
+for `cache_ms`, which defaults to 30 seconds. Probes are terminated after
+`timeout_ms`, which defaults to five seconds:
+
+```toml
+availability = { command = ["gh", "pr", "view", "--json", "number"], cwd = "$checkout_path", cache_ms = 30000, timeout_ms = 5000 }
+```
+
+Probe commands and working directories use the same whole-field interpolation
+and direct process execution as argv actions. Invalid interpolation and nonzero
+exit statuses leave the action unavailable without closing Vellum.
+
+Set `actions.default` to make the normal accept binding run that named action.
+Without a default action, Enter keeps the original output-only behavior and
+prints `item.value`. An action's optional `key` invokes it directly. The action
+menu uses Ctrl-A by default and can be changed with `actions.menu`; it lists all
+actions for the current item, uses the normal up/down and accept bindings, and
+closes with Escape. Set `actions.menu = false` when only default or direct action
+bindings should be available.
+
+Try the bundled action playground without running any destructive commands:
+
+```sh
+cargo run --quiet -- examples/actions.toml
+```
+
+Press Ctrl-A and type part of a label or description, such as `error`, `rerun`,
+or `ready`. Arrow keys and Ctrl-N/Ctrl-P navigate the filtered list. The refresh
+action reruns the source, the error action demonstrates failure handling, and
+the ready-only action disappears when `Beta project` is selected. Enter runs the
+default harmless exit action.
+
+`on_success = "exit"` closes Vellum without writing selection output.
+`on_success = "refresh"` reruns the palette source, preserves the search query,
+and keeps selection on the same `item.value` when it still exists. If an action
+removed that item, Vellum selects the nearest remaining list position. Failed
+commands and failed refreshes leave Vellum open and show the error in the
+footer.
+
+For commands that intentionally need shell syntax, set `shell = "..."` instead
+of `command`. This explicit form runs through `sh -c` and does not interpolate
+selected fields. Action processes are non-interactive: stdout is discarded,
+stderr is captured for error reporting, and they do not receive the terminal.
+Confirmation prompts are a future extension; this version relies on the invoked
+command for any confirmation it can perform without interactive terminal input.
+
 ## Input
 
 Readline-style bindings are enabled by default: Ctrl-N/Ctrl-P browse results,
 Ctrl-F/Ctrl-B move the input cursor, Ctrl-A/Ctrl-E jump to either end, and Ctrl-W
-deletes the previous word. Each action accepts one key, a list of keys, or
-`false`. Set `keybindings.enabled = false` to disable all configurable bindings.
-Global bindings and per-palette overrides use the same syntax.
+deletes the previous word. A configured action menu takes precedence over an
+overlapping input binding, so the default Ctrl-A menu replaces start-of-input in
+palettes with actions. Set `actions.menu` to another key to retain Ctrl-A input
+movement. Each binding accepts one key, a list of keys, or `false`. Set
+`keybindings.enabled = false` to disable all configurable input bindings. Global
+bindings and per-palette overrides use the same syntax.
 
 Vim input mode is enabled by default and starts in insert mode. Escape changes
 insert mode to normal mode; Escape again closes Vellum. A palette starting in
@@ -291,8 +410,8 @@ as `status a/w/d/i/b/u`, instead of repeating every choice label. List
 navigation remains available in filter mode, including Ctrl-N and Ctrl-P.
 
 Filter choices are configured per palette and can also be supplied by global
-defaults. The `herdr-agents` palette includes `w`, `d`, `i`, `b`, and `u` for
-working, done, idle, blocked, and unknown agents.
+defaults. The `herdr-agents` and `herdr-workspaces` palettes include `w`, `d`,
+`i`, `b`, and `u` for working, done, idle, blocked, and unknown entries.
 
 ## Frecency
 

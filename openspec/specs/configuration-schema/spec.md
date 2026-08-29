@@ -43,3 +43,9 @@ Vellum SHALL configure Taplo to use the bundled schema for example TOML files.
 - GIVEN the shared configuration option schema
 - WHEN its filter definitions are inspected
 - THEN it describes the filter label, mode and all-items bindings, and behavioral and presentation fields for each exact-match choice
+
+#### Scenario: Shared schema describes native actions {#SCH-006}
+
+- GIVEN the shared configuration option schema
+- WHEN its action definitions are inspected
+- THEN it describes default and menu controls, named argv or shell commands, interpolated working directories, direct bindings, icons, descriptions, field and cached command availability conditions, and success behavior

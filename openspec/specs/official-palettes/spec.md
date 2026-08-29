@@ -47,6 +47,22 @@ Vellum SHALL bundle a compact workspace switcher showing workspace identity, che
 - WHEN a workspace item is rendered
 - THEN its name and status share the first row, its checkout path uses the second row, and numeric and agent-detail metadata are hidden
 - AND the workspace name aligns with the folder icon while focus is indicated by color instead of a leading glyph
+- AND checkout paths inside the current home directory are displayed relative to `~`
+
+#### Scenario: Workspace palette provides native focus and removal actions {#PAL-015}
+
+- GIVEN the bundled Herdr workspace palette
+- WHEN its actions are inspected
+- THEN Enter focuses the selected workspace and exits
+- AND the quick-action menu can remove its HWT worktree and refresh the workspace source
+- AND a workspace with a checkout path can open its GitHub repository, pull request, or pull-request checks
+- AND pull-request actions are offered only when a cached asynchronous GitHub probe finds a pull request for the checkout branch
+
+#### Scenario: Workspace palette filters by lifecycle state {#PAL-016}
+
+- GIVEN the bundled Herdr workspace palette
+- WHEN its filter configuration is parsed
+- THEN it provides the same lifecycle-state choices, icons, and colors as the Herdr agent palette
 
 ### Requirement: Provide a Herdr agent palette
 
@@ -69,6 +85,7 @@ Vellum SHALL bundle an agent switcher showing each active agent's status.
 - GIVEN the bundled Herdr agent palette
 - WHEN its filter configuration is parsed
 - THEN working, done, idle, blocked, and unknown states have dedicated filter choices
+- AND working uses a yellow filled circle, blocked a red filled circle, idle a green ring, done a blue filled circle, and unknown a gray dot
 
 ### Requirement: Provide a file finder palette
 

@@ -83,6 +83,24 @@
         }
       }
     },
+    "actions": {
+      "description": "Generic commands that can run for the selected source item.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "description": "Name of the action invoked by the accept binding. Without this, accept returns item.value.",
+          "type": "string",
+          "minLength": 1
+        },
+        "menu": { "$ref": "#/$defs/bindings", "default": "ctrl-a" },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/action" },
+          "default": []
+        }
+      }
+    },
     "item": {
       "type": "object",
       "additionalProperties": false,
@@ -178,6 +196,102 @@
           "minItems": 1
         }
       ]
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "label"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "icon": {
+          "description": "Optional icon displayed before the action label.",
+          "type": "string",
+          "default": ""
+        },
+        "description": {
+          "description": "Optional secondary text displayed below the action label and included in fuzzy matching.",
+          "type": "string",
+          "default": ""
+        },
+        "key": { "$ref": "#/$defs/bindings", "default": false },
+        "command": {
+          "description": "Argv array executed directly. An argument consisting of $field or $nested.field is replaced with one selected scalar field.",
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "shell": {
+          "description": "Explicit opt-in shell command executed with sh -c. Item fields are not interpolated.",
+          "type": "string",
+          "minLength": 1
+        },
+        "cwd": {
+          "description": "Working directory for the action. A value consisting of $field or $nested.field is replaced with one selected scalar field.",
+          "type": "string",
+          "minLength": 1
+        },
+        "availability": { "$ref": "#/$defs/action-availability" },
+        "when": {
+          "description": "Conditions that must all match the selected item before this action is available.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/action-condition" },
+          "default": []
+        },
+        "on_success": { "enum": ["exit", "refresh"], "default": "exit" }
+      },
+      "oneOf": [
+        { "required": ["command"], "not": { "required": ["shell"] } },
+        { "required": ["shell"], "not": { "required": ["command"] } }
+      ]
+    },
+    "action-condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field"],
+      "properties": {
+        "field": { "type": "string", "minLength": 1 },
+        "equals": { "type": ["string", "number", "integer", "boolean"] },
+        "is_set": {
+          "description": "Whether the field must exist with a non-null value.",
+          "type": "boolean"
+        }
+      },
+      "oneOf": [
+        { "required": ["equals"], "not": { "required": ["is_set"] } },
+        { "required": ["is_set"], "not": { "required": ["equals"] } }
+      ]
+    },
+    "action-availability": {
+      "description": "Asynchronous command probe that gates action availability. A zero exit status makes the action available, and equivalent interpolated commands, working directories, and timeout policies share cached results.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command"],
+      "properties": {
+        "command": {
+          "description": "Argv array executed directly with stdin, stdout, and stderr disconnected.",
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "cwd": {
+          "description": "Working directory for the probe. A value consisting of $field or $nested.field is replaced with one selected scalar field.",
+          "type": "string",
+          "minLength": 1
+        },
+        "cache_ms": {
+          "description": "Duration in milliseconds to reuse successful or unsuccessful results for an equivalent interpolated command and working directory.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 30000
+        },
+        "timeout_ms": {
+          "description": "Maximum probe runtime in milliseconds before the process is terminated and treated as unavailable.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 5000
+        }
+      }
     },
     "segment": {
       "oneOf": [

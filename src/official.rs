@@ -299,7 +299,41 @@ mod tests {
             ]
         );
         assert_eq!(config.filters.choices[0].icon, "●");
-        assert_eq!(config.filters.choices[0].fg.as_deref(), Some("#7aa2f7"));
+        assert_eq!(config.filters.choices[0].fg.as_deref(), Some("yellow"));
+        assert_eq!(config.filters.choices[1].icon, "●");
+        assert_eq!(config.filters.choices[1].fg.as_deref(), Some("#89b4fa"));
+        assert_eq!(config.filters.choices[2].fg.as_deref(), Some("#a6e3a1"));
+        assert_eq!(config.filters.choices[3].fg.as_deref(), Some("#ff6188"));
+        assert_eq!(config.filters.choices[2].icon, "○");
+        assert_eq!(config.filters.choices[4].icon, "·");
+        assert_eq!(config.filters.choices[4].fg.as_deref(), Some("#999999"));
+    }
+
+    #[test]
+    fn pal_016_workspace_palette_filters_match_agent_lifecycle_states() {
+        let workspace = PALETTES
+            .iter()
+            .find(|palette| palette.name == "herdr-workspaces")
+            .map(|palette| Config::parse(palette.contents).unwrap())
+            .unwrap();
+        let agents = PALETTES
+            .iter()
+            .find(|palette| palette.name == "herdr-agents")
+            .map(|palette| Config::parse(palette.contents).unwrap())
+            .unwrap();
+
+        assert_eq!(workspace.filters, agents.filters);
+        assert!(
+            workspace
+                .filters
+                .choices
+                .iter()
+                .all(|choice| choice.source == "agent_status")
+        );
+        assert_eq!(
+            representative_item("herdr-workspaces")["agent_status"],
+            workspace.filters.choices[0].value
+        );
     }
 
     #[test]
@@ -353,7 +387,7 @@ mod tests {
             template,
             [
                 vec!["$label", "$status_icon", " ", "$agent_status",],
-                vec!["󰉋 ", "$checkout_path"],
+                vec!["󰉋 ", "$checkout_path_display"],
             ]
         );
         assert_eq!(rendered.rows.len(), 2);
@@ -388,6 +422,73 @@ mod tests {
             terminal.backend().buffer()[(1, 3)].fg,
             Color::Rgb(122, 162, 247)
         );
+    }
+
+    #[test]
+    fn pal_015_workspace_palette_provides_native_focus_and_removal_actions() {
+        let palette = PALETTES
+            .iter()
+            .find(|palette| palette.name == "herdr-workspaces")
+            .unwrap();
+        let config = Config::parse(palette.contents).unwrap();
+
+        assert_eq!(config.actions.default.as_deref(), Some("focus"));
+        assert_eq!(config.actions.menu.label(), "ctrl-a");
+        assert_eq!(config.actions.items[0].icon, "󰍉");
+        assert!(!config.actions.items[0].description.is_empty());
+        assert_eq!(
+            config.actions.items[0].command.as_deref(),
+            Some(
+                ["herdr", "workspace", "focus", "$workspace_id"]
+                    .map(str::to_owned)
+                    .as_slice()
+            )
+        );
+        assert_eq!(
+            config.actions.items[1].command.as_deref(),
+            Some(
+                ["hwt", "remove", "--workspace", "$workspace_id"]
+                    .map(str::to_owned)
+                    .as_slice()
+            )
+        );
+        assert_eq!(
+            config.actions.items[1].on_success,
+            crate::config::OnSuccess::Refresh
+        );
+        assert_eq!(config.actions.items[1].when.len(), 2);
+        assert!(!config.actions.items[1].is_available(&representative_item(palette.name)));
+        let item = representative_item(palette.name);
+        let mut regular_checkout = item.clone();
+        regular_checkout.insert("worktree".into(), Value::Null);
+        for (name, command) in [
+            ("open-repository", &["gh", "repo", "view", "--web"][..]),
+            ("open-pull-request", &["gh", "pr", "view", "--web"]),
+            ("open-pull-request-checks", &["gh", "pr", "checks", "--web"]),
+        ] {
+            let action = config
+                .actions
+                .items
+                .iter()
+                .find(|action| action.name == name)
+                .unwrap();
+            assert_eq!(action.command.as_deref().unwrap(), command);
+            assert_eq!(action.cwd.as_deref(), Some("$checkout_path"));
+            assert!(action.is_available(&item));
+            assert!(action.is_available(&regular_checkout));
+            if name == "open-repository" {
+                assert!(action.availability.is_none());
+            } else {
+                let availability = action.availability.as_ref().unwrap();
+                assert_eq!(
+                    availability.command,
+                    ["gh", "pr", "view", "--json", "number"]
+                );
+                assert_eq!(availability.cwd.as_deref(), Some("$checkout_path"));
+                assert_eq!(availability.cache_ms, 30_000);
+                assert_eq!(availability.timeout_ms, 5_000);
+            }
+        }
     }
 
     fn representative_item(name: &str) -> Map<String, Value> {

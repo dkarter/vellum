@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, Deserializer};
+use serde_json::{Map, Value};
 
 use crate::builtins::BuiltinSource;
 
@@ -18,9 +19,113 @@ pub struct Config {
     pub input: InputConfig,
     #[serde(default)]
     pub frecency: FrecencyConfig,
+    #[serde(default)]
+    pub actions: ActionsConfig,
     pub item: ItemConfig,
     #[serde(default)]
     pub theme: Theme,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct ActionsConfig {
+    pub default: Option<String>,
+    pub menu: Bindings,
+    pub items: Vec<ActionConfig>,
+}
+
+impl Default for ActionsConfig {
+    fn default() -> Self {
+        Self {
+            default: None,
+            menu: Bindings::new(["ctrl-a"]),
+            items: Vec::new(),
+        }
+    }
+}
+
+impl ActionsConfig {
+    pub fn default_index(&self) -> Option<usize> {
+        self.default
+            .as_ref()
+            .and_then(|name| self.items.iter().position(|action| &action.name == name))
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ActionConfig {
+    pub name: String,
+    pub label: String,
+    #[serde(default)]
+    pub icon: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub key: Bindings,
+    #[serde(default)]
+    pub command: Option<Vec<String>>,
+    #[serde(default)]
+    pub shell: Option<String>,
+    #[serde(default)]
+    pub cwd: Option<String>,
+    #[serde(default)]
+    pub availability: Option<ActionAvailability>,
+    #[serde(default)]
+    pub when: Vec<ActionCondition>,
+    #[serde(default)]
+    pub on_success: OnSuccess,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ActionAvailability {
+    pub command: Vec<String>,
+    #[serde(default)]
+    pub cwd: Option<String>,
+    #[serde(default = "default_availability_cache_ms")]
+    pub cache_ms: u64,
+    #[serde(default = "default_availability_timeout_ms")]
+    pub timeout_ms: u64,
+}
+
+const fn default_availability_cache_ms() -> u64 {
+    30_000
+}
+
+const fn default_availability_timeout_ms() -> u64 {
+    5_000
+}
+
+impl ActionConfig {
+    pub fn is_available(&self, item: &Map<String, Value>) -> bool {
+        self.when.iter().all(|condition| {
+            let actual = crate::item::field_value(item, &condition.field);
+            match (&condition.equals, condition.is_set) {
+                (Some(expected), None) => actual == Some(expected),
+                (None, Some(expected)) => actual.is_some_and(|value| !value.is_null()) == expected,
+                _ => false,
+            }
+        })
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ActionCondition {
+    pub field: String,
+    #[serde(default)]
+    pub equals: Option<Value>,
+    #[serde(default)]
+    pub is_set: Option<bool>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OnSuccess {
+    #[default]
+    Exit,
+    Refresh,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -143,7 +248,7 @@ impl Keybindings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Bindings(pub Vec<Binding>);
 
 impl Bindings {
@@ -418,11 +523,6 @@ impl Config {
         if !self.filters.choices.is_empty() && self.filters.label.trim().is_empty() {
             bail!("filters.label cannot be empty when filter choices are configured");
         }
-        let navigation_conflicts = |bindings: &Bindings| {
-            self.keybindings.enabled
-                && (bindings.overlaps(&self.keybindings.down)
-                    || bindings.overlaps(&self.keybindings.up))
-        };
         let global_binding_conflicts = |bindings: &Bindings| {
             self.keybindings.enabled
                 && [
@@ -438,6 +538,121 @@ impl Config {
                 ]
                 .into_iter()
                 .any(|global| bindings.overlaps(global))
+        };
+        if let Some(name) = &self.actions.default
+            && !self.actions.items.iter().any(|action| &action.name == name)
+        {
+            bail!("actions.default references unknown action '{name}'");
+        }
+        if self
+            .actions
+            .menu
+            .contains_key(KeyCode::Char('c'), KeyModifiers::CONTROL)
+            || self.actions.menu.overlaps(&self.filters.mode)
+        {
+            bail!("actions.menu conflicts with Ctrl-C or filters.mode");
+        }
+        for (index, action) in self.actions.items.iter().enumerate() {
+            if action.name.trim().is_empty() || action.label.trim().is_empty() {
+                bail!("action name and label cannot be empty");
+            }
+            match (&action.command, &action.shell) {
+                (Some(command), None) if !command.is_empty() && !command[0].trim().is_empty() => {}
+                (None, Some(shell)) if !shell.trim().is_empty() => {}
+                (Some(_), Some(_)) => {
+                    bail!(
+                        "action '{}' must set only one of command or shell",
+                        action.name
+                    )
+                }
+                _ => bail!(
+                    "action '{}' must set a non-empty command or shell",
+                    action.name
+                ),
+            }
+            if action.cwd.as_ref().is_some_and(|cwd| cwd.trim().is_empty()) {
+                bail!("action '{}' cwd cannot be empty", action.name);
+            }
+            if let Some(availability) = &action.availability {
+                if availability.command.is_empty() || availability.command[0].trim().is_empty() {
+                    bail!(
+                        "action '{}' availability command cannot be empty",
+                        action.name
+                    );
+                }
+                if availability
+                    .cwd
+                    .as_ref()
+                    .is_some_and(|cwd| cwd.trim().is_empty())
+                {
+                    bail!("action '{}' availability cwd cannot be empty", action.name);
+                }
+                if availability.cache_ms == 0 {
+                    bail!(
+                        "action '{}' availability cache_ms must be positive",
+                        action.name
+                    );
+                }
+                if availability.timeout_ms == 0 {
+                    bail!(
+                        "action '{}' availability timeout_ms must be positive",
+                        action.name
+                    );
+                }
+            }
+            if action
+                .key
+                .contains_key(KeyCode::Char('c'), KeyModifiers::CONTROL)
+            {
+                bail!("action '{}' key conflicts with Ctrl-C", action.name);
+            }
+            if action.key.overlaps(&self.actions.menu) {
+                bail!("action '{}' key conflicts with actions.menu", action.name);
+            }
+            if action.key.overlaps(&self.filters.mode) {
+                bail!("action '{}' key conflicts with filters.mode", action.name);
+            }
+            if global_binding_conflicts(&action.key)
+                || (self.search.enabled
+                    && action
+                        .key
+                        .0
+                        .iter()
+                        .any(|binding| binding.modifiers == KeyModifiers::NONE))
+            {
+                bail!(
+                    "action '{}' key conflicts with input or a global binding",
+                    action.name
+                );
+            }
+            if self.actions.items[..index]
+                .iter()
+                .any(|other| action.name == other.name || action.key.overlaps(&other.key))
+            {
+                bail!("action names and keys must be unique");
+            }
+            for condition in &action.when {
+                if condition.field.trim().is_empty()
+                    || condition.equals.is_some() == condition.is_set.is_some()
+                {
+                    bail!(
+                        "action '{}' conditions require a field and exactly one of equals or is_set",
+                        action.name
+                    );
+                }
+                if condition
+                    .equals
+                    .as_ref()
+                    .is_some_and(|value| value.is_array() || value.is_object())
+                {
+                    bail!("action '{}' condition equals must be a scalar", action.name);
+                }
+            }
+        }
+        let navigation_conflicts = |bindings: &Bindings| {
+            self.keybindings.enabled
+                && (bindings.overlaps(&self.keybindings.down)
+                    || bindings.overlaps(&self.keybindings.up))
         };
         let input_conflicts = self.search.enabled
             && self
@@ -777,5 +992,83 @@ mod tests {
         assert!(config.frecency.enabled);
         assert_eq!(config.frecency.max_entries, 25);
         assert_eq!(Config::parse(MINIMAL).unwrap().frecency.max_entries, 1_000);
+    }
+
+    #[test]
+    fn act_001_action_configuration_parses_and_validates() {
+        let config = Config::parse(&format!(
+            "{MINIMAL}\n{}",
+            r#"
+            [actions]
+            default = "focus"
+            menu = "ctrl-o"
+
+            [[actions.items]]
+            name = "focus"
+            label = "Focus"
+            icon = "→"
+            description = "Focus the selected workspace"
+            key = "ctrl-r"
+            command = ["herdr", "workspace", "focus", "$id"]
+            cwd = "$checkout_path"
+            availability = { command = ["test", "-d", "$checkout_path"], cwd = "$checkout_path", cache_ms = 5000, timeout_ms = 2000 }
+            when = [{ field = "focused", equals = false }]
+
+            [[actions.items]]
+            name = "remove"
+            label = "Remove"
+            shell = "hwt remove --workspace '$id'"
+            on_success = "refresh"
+            "#
+        ))
+        .unwrap();
+
+        assert_eq!(config.actions.default_index(), Some(0));
+        assert_eq!(config.actions.menu.label(), "ctrl-o");
+        assert_eq!(config.actions.items[0].icon, "→");
+        assert_eq!(
+            config.actions.items[0].description,
+            "Focus the selected workspace"
+        );
+        assert_eq!(config.actions.items[0].command.as_ref().unwrap()[3], "$id");
+        assert_eq!(
+            config.actions.items[0].cwd.as_deref(),
+            Some("$checkout_path")
+        );
+        let availability = config.actions.items[0].availability.as_ref().unwrap();
+        assert_eq!(availability.command[2], "$checkout_path");
+        assert_eq!(availability.cwd.as_deref(), Some("$checkout_path"));
+        assert_eq!(availability.cache_ms, 5_000);
+        assert_eq!(availability.timeout_ms, 2_000);
+        assert_eq!(config.actions.items[0].when[0].equals, Some(false.into()));
+        assert_eq!(config.actions.items[1].on_success, OnSuccess::Refresh);
+        let available = serde_json::json!({"focused": false})
+            .as_object()
+            .unwrap()
+            .clone();
+        let unavailable = serde_json::json!({"focused": true})
+            .as_object()
+            .unwrap()
+            .clone();
+        assert!(config.actions.items[0].is_available(&available));
+        assert!(!config.actions.items[0].is_available(&unavailable));
+
+        let unknown = format!("{MINIMAL}\n[actions]\ndefault = 'missing'");
+        assert!(
+            Config::parse(&unknown)
+                .unwrap_err()
+                .to_string()
+                .contains("unknown action")
+        );
+
+        let ambiguous = format!(
+            "{MINIMAL}\n[[actions.items]]\nname='x'\nlabel='X'\ncommand=['true']\nshell='true'"
+        );
+        assert!(
+            Config::parse(&ambiguous)
+                .unwrap_err()
+                .to_string()
+                .contains("only one")
+        );
     }
 }

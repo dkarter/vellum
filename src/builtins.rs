@@ -1,4 +1,9 @@
-use std::{collections::HashMap, path::Path, process::Command};
+use std::{
+    collections::HashMap,
+    path::{Component, Path, PathBuf},
+    process::Command,
+    sync::OnceLock,
+};
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
@@ -57,6 +62,7 @@ fn run_files() -> Result<Vec<SourceItem>> {
 
 pub fn herdr_workspaces(input: &str) -> Result<Vec<SourceItem>> {
     let snapshot = snapshot(input)?;
+    let home = home_dir();
     let agents = array(&snapshot, "agents")?;
     let mut agents_by_workspace: HashMap<&str, Vec<&Map<String, Value>>> = HashMap::new();
     for agent in agents {
@@ -116,6 +122,12 @@ pub fn herdr_workspaces(input: &str) -> Result<Vec<SourceItem>> {
                         .cloned()
                 })
                 .or_else(|| pane_cwds.get(workspace_id).copied().cloned());
+            let checkout_path_display = checkout_path
+                .as_ref()
+                .and_then(Value::as_str)
+                .map(|path| display_checkout_path(path, home))
+                .map(Value::from)
+                .unwrap_or(Value::Null);
             let mut item = Map::new();
             copy_required(&mut item, workspace, "workspace_id")?;
             copy_required(&mut item, workspace, "number")?;
@@ -156,8 +168,13 @@ pub fn herdr_workspaces(input: &str) -> Result<Vec<SourceItem>> {
                 if focused { "#7aa2f7" } else { "#c0caf5" }.into(),
             );
             decorate_status(&mut item, state);
+            item.insert(
+                "worktree".into(),
+                workspace.get("worktree").cloned().unwrap_or(Value::Null),
+            );
             item.insert("repo_name".into(), repo_name.unwrap_or(Value::Null));
             item.insert("checkout_path".into(), checkout_path.unwrap_or(Value::Null));
+            item.insert("checkout_path_display".into(), checkout_path_display);
             for state in ["blocked", "working", "done", "idle", "unknown"] {
                 item.insert(
                     format!("{state}_agents"),
@@ -302,21 +319,49 @@ fn normalized_state(state: Option<&str>) -> &'static str {
 
 fn state_icon(state: &str) -> &'static str {
     match state {
-        "blocked" => "!",
-        "working" => "●",
-        "done" | "idle" => "✓",
-        _ => "○",
+        "blocked" | "working" | "done" => "●",
+        "idle" => "○",
+        _ => "·",
     }
 }
 
 fn state_color(state: &str) -> &'static str {
     match state {
-        "blocked" => "#f7768e",
-        "working" => "#7aa2f7",
-        "done" => "#e0af68",
-        "idle" => "#9ece6a",
-        _ => "#565f89",
+        "blocked" => "#ff6188",
+        "working" => "yellow",
+        "done" => "#89b4fa",
+        "idle" => "#a6e3a1",
+        _ => "#999999",
     }
+}
+
+fn display_checkout_path(path: &str, home: Option<&Path>) -> String {
+    let Some(home) = home.filter(|home| home.is_absolute() && !home.as_os_str().is_empty()) else {
+        return path.to_owned();
+    };
+    let Ok(relative) = Path::new(path).strip_prefix(home) else {
+        return path.to_owned();
+    };
+    if relative
+        .components()
+        .any(|component| component == Component::ParentDir)
+    {
+        return path.to_owned();
+    }
+    if relative.as_os_str().is_empty() {
+        "~".into()
+    } else {
+        let mut display = String::from("~");
+        display.push(std::path::MAIN_SEPARATOR);
+        display.push_str(&relative.to_string_lossy());
+        display
+    }
+}
+
+fn home_dir() -> Option<&'static Path> {
+    static HOME: OnceLock<Option<PathBuf>> = OnceLock::new();
+    HOME.get_or_init(|| std::env::var_os("HOME").map(PathBuf::from))
+        .as_deref()
 }
 
 // Compact categories adapted from Snacks.nvim's nvim-web-devicons fallback.
@@ -401,8 +446,10 @@ mod tests {
         assert_eq!(items[0]["focus_icon"], "▶");
         assert_eq!(items[0]["focus_color"], "#7aa2f7");
         assert_eq!(items[1]["focus_color"], "#c0caf5");
+        assert_eq!(items[0]["worktree"]["repo_name"], "vellum");
+        assert_eq!(items[1]["worktree"], Value::Null);
         assert_eq!(items[0]["working_agents"], "● opencode: Official palettes");
-        assert_eq!(items[0]["idle_agents"], "✓ claude: Reviewing tests");
+        assert_eq!(items[0]["idle_agents"], "○ claude: Reviewing tests");
         assert_eq!(items[1]["agent_summary"], "○ no active agents");
     }
 
@@ -413,7 +460,32 @@ mod tests {
         assert_eq!(items[0]["pane_id"], "w1:p1");
         assert_eq!(items[0]["workspace_label"], "vellum");
         assert_eq!(items[0]["status_icon"], "●");
-        assert_eq!(items[1]["status_icon"], "✓");
+        assert_eq!(items[1]["status_icon"], "○");
+        assert_eq!(items[0]["status_color"], "yellow");
+        assert_eq!(items[1]["status_color"], "#a6e3a1");
+    }
+
+    #[test]
+    fn pal_013_workspace_checkout_paths_contract_the_home_directory() {
+        let home = Path::new("/Users/example");
+
+        assert_eq!(
+            display_checkout_path("/Users/example/dev/vellum", Some(home)),
+            "~/dev/vellum"
+        );
+        assert_eq!(display_checkout_path("/Users/example", Some(home)), "~");
+        assert_eq!(
+            display_checkout_path("/opt/vellum", Some(home)),
+            "/opt/vellum"
+        );
+        assert_eq!(
+            display_checkout_path("/Users/example/../outside", Some(home)),
+            "/Users/example/../outside"
+        );
+        assert_eq!(
+            display_checkout_path("relative/path", Some(Path::new(""))),
+            "relative/path"
+        );
     }
 
     #[test]
