@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/dkarter/vellum/compare/v0.6.0...v0.7.0) (2026-08-29)
+
+
+### Features
+
+* add dynamic repeated item presentation ([4d4608c](https://github.com/dkarter/vellum/commit/4d4608c64d1343a4c9a5bc7abc96c9ce873f325b))
+
 ## [0.6.0](https://github.com/dkarter/vellum/compare/v0.5.0...v0.6.0) (2026-08-29)
 
 
