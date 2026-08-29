@@ -226,6 +226,11 @@
           "type": "string",
           "minLength": 1
         },
+        "cwd": {
+          "description": "Working directory for the action. A value consisting of $field or $nested.field is replaced with one selected scalar field.",
+          "type": "string",
+          "minLength": 1
+        },
         "when": {
           "description": "Conditions that must all match the selected item before this action is available.",
           "type": "array",

@@ -20,6 +20,9 @@ pub fn run(action: &ActionConfig, item: &Map<String, Value>) -> Result<()> {
         ]);
         command
     };
+    if let Some(cwd) = &action.cwd {
+        command.current_dir(interpolate_argument(cwd, item)?);
+    }
     command.stdout(Stdio::null());
     let output = crate::source::run_command(&mut command, &label)?;
     ensure_success(&label, &output)
@@ -27,21 +30,23 @@ pub fn run(action: &ActionConfig, item: &Map<String, Value>) -> Result<()> {
 
 fn interpolate(argv: &[String], item: &Map<String, Value>) -> Result<Vec<String>> {
     argv.iter()
-        .map(|argument| {
-            let Some(path) = field_expression(argument) else {
-                return Ok(argument.clone());
-            };
-            match field_value(item, path) {
-                Some(Value::String(value)) => Ok(value.clone()),
-                Some(Value::Bool(value)) => Ok(value.to_string()),
-                Some(Value::Number(value)) => Ok(value.to_string()),
-                Some(Value::Null) | None => bail!("action field '${path}' is missing or null"),
-                Some(Value::Array(_) | Value::Object(_)) => {
-                    bail!("action field '${path}' must be a scalar")
-                }
-            }
-        })
+        .map(|argument| interpolate_argument(argument, item))
         .collect()
+}
+
+fn interpolate_argument(argument: &str, item: &Map<String, Value>) -> Result<String> {
+    let Some(path) = field_expression(argument) else {
+        return Ok(argument.to_owned());
+    };
+    match field_value(item, path) {
+        Some(Value::String(value)) => Ok(value.clone()),
+        Some(Value::Bool(value)) => Ok(value.to_string()),
+        Some(Value::Number(value)) => Ok(value.to_string()),
+        Some(Value::Null) | None => bail!("action field '${path}' is missing or null"),
+        Some(Value::Array(_) | Value::Object(_)) => {
+            bail!("action field '${path}' must be a scalar")
+        }
+    }
 }
 
 fn field_expression(argument: &str) -> Option<&str> {
@@ -72,6 +77,7 @@ mod tests {
             key: Bindings::default(),
             command: Some(command.into_iter().map(str::to_owned).collect()),
             shell: None,
+            cwd: None,
             when: Vec::new(),
             on_success: OnSuccess::Exit,
         }
@@ -105,5 +111,41 @@ mod tests {
         let action = action(vec!["test", "$HOME/path", "=", "$HOME/path"]);
 
         run(&action, &item).unwrap();
+    }
+
+    #[test]
+    fn act_010_action_working_directory_interpolates_safely() {
+        let root = std::env::temp_dir().join(format!(
+            "vellum-action-cwd-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("marker"), "present").unwrap();
+        let item = json!({"checkout_path": root}).as_object().unwrap().clone();
+        let mut action = action(vec!["test", "-f", "marker"]);
+        action.cwd = Some("$checkout_path".into());
+
+        run(&action, &item).unwrap();
+
+        let spawned = root.join("spawned");
+        action.command = Some(vec![
+            "sh".into(),
+            "-c".into(),
+            "touch \"$1\"".into(),
+            "sh".into(),
+            spawned.to_string_lossy().into_owned(),
+        ]);
+        for item in [
+            json!({}),
+            json!({"checkout_path": null}),
+            json!({"checkout_path": []}),
+            json!({"checkout_path": {}}),
+        ] {
+            assert!(run(&action, item.as_object().unwrap()).is_err());
+            assert!(!spawned.exists());
+        }
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

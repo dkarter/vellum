@@ -156,6 +156,10 @@ pub fn herdr_workspaces(input: &str) -> Result<Vec<SourceItem>> {
                 if focused { "#7aa2f7" } else { "#c0caf5" }.into(),
             );
             decorate_status(&mut item, state);
+            item.insert(
+                "worktree".into(),
+                workspace.get("worktree").cloned().unwrap_or(Value::Null),
+            );
             item.insert("repo_name".into(), repo_name.unwrap_or(Value::Null));
             item.insert("checkout_path".into(), checkout_path.unwrap_or(Value::Null));
             for state in ["blocked", "working", "done", "idle", "unknown"] {
@@ -401,6 +405,8 @@ mod tests {
         assert_eq!(items[0]["focus_icon"], "▶");
         assert_eq!(items[0]["focus_color"], "#7aa2f7");
         assert_eq!(items[1]["focus_color"], "#c0caf5");
+        assert_eq!(items[0]["worktree"]["repo_name"], "vellum");
+        assert_eq!(items[1]["worktree"], Value::Null);
         assert_eq!(items[0]["working_agents"], "● opencode: Official palettes");
         assert_eq!(items[0]["idle_agents"], "✓ claude: Reviewing tests");
         assert_eq!(items[1]["agent_summary"], "○ no active agents");

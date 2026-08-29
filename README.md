@@ -69,7 +69,7 @@ The library includes these palettes:
 
 | Palette            | Dependency           | Enter behavior       |
 | ------------------ | -------------------- | -------------------- |
-| `herdr-workspaces` | `herdr`, `hwt`       | Focus workspace      |
+| `herdr-workspaces` | `herdr`, `hwt`, `gh` | Focus workspace      |
 | `herdr-agents`     | `herdr`              | Output agent pane ID |
 | `files`            | `fd` and a Nerd Font | Output file path     |
 
@@ -77,9 +77,9 @@ The Herdr palettes use the installed CLI's `herdr api snapshot` JSON and refresh
 live agent state. The file palette runs `fd` directly and applies a compact
 filetype icon map adapted from Snacks.nvim's `nvim-web-devicons` fallback.
 
-The workspace palette focuses on Enter. Ctrl-A opens its action menu, where the
-selected HWT worktree can be removed and the choices refreshed without leaving
-Vellum:
+The workspace palette focuses on Enter. Ctrl-A opens its action menu. A selected
+HWT worktree can be removed and the choices refreshed without leaving Vellum,
+or opened on GitHub at its repository, pull request, or pull-request checks:
 
 ```sh
 vellum herdr-workspaces
@@ -275,6 +275,15 @@ shell. An argument consisting entirely of a field expression such as `$id` or
 argument. Strings with spaces or shell metacharacters therefore remain one
 argument and cannot become shell syntax. Missing, null, array, and object fields
 fail safely and leave Vellum open.
+
+Set `cwd` to run an action from a literal directory or a selected scalar field.
+Vellum resolves the field and passes it directly to the child process without a
+shell:
+
+```toml
+cwd = "$checkout_path"
+command = ["gh", "pr", "view", "--web"]
+```
 
 Optional `when` conditions keep an action out of direct dispatch and the menu
 unless every condition matches the selected item. Use `equals` for an exact

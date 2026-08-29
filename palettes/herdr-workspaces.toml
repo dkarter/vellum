@@ -32,6 +32,36 @@ when = [
 ]
 on_success = "refresh"
 
+[[actions.items]]
+name = "open-repository"
+label = "Open repository"
+icon = "󰊤"
+description = "Open this worktree's repository on GitHub"
+command = ["gh", "repo", "view", "--web"]
+cwd = "$checkout_path"
+when = [{ field = "worktree", is_set = true }]
+on_success = "exit"
+
+[[actions.items]]
+name = "open-pull-request"
+label = "Open pull request"
+icon = ""
+description = "Open the pull request for this worktree branch"
+command = ["gh", "pr", "view", "--web"]
+cwd = "$checkout_path"
+when = [{ field = "worktree", is_set = true }]
+on_success = "exit"
+
+[[actions.items]]
+name = "open-pull-request-checks"
+label = "Open PR checks"
+icon = "󰙨"
+description = "Open GitHub Actions checks for this pull request"
+command = ["gh", "pr", "checks", "--web"]
+cwd = "$checkout_path"
+when = [{ field = "worktree", is_set = true }]
+on_success = "exit"
+
 [item]
 value = "$workspace_id"
 template = [

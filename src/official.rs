@@ -424,6 +424,22 @@ mod tests {
         );
         assert_eq!(config.actions.items[1].when.len(), 2);
         assert!(!config.actions.items[1].is_available(&representative_item(palette.name)));
+        let item = representative_item(palette.name);
+        for (name, command) in [
+            ("open-repository", &["gh", "repo", "view", "--web"][..]),
+            ("open-pull-request", &["gh", "pr", "view", "--web"]),
+            ("open-pull-request-checks", &["gh", "pr", "checks", "--web"]),
+        ] {
+            let action = config
+                .actions
+                .items
+                .iter()
+                .find(|action| action.name == name)
+                .unwrap();
+            assert_eq!(action.command.as_deref().unwrap(), command);
+            assert_eq!(action.cwd.as_deref(), Some("$checkout_path"));
+            assert!(action.is_available(&item));
+        }
     }
 
     fn representative_item(name: &str) -> Map<String, Value> {

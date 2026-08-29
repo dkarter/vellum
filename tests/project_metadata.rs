@@ -115,6 +115,7 @@ fn sch_006_shared_schema_describes_native_actions() {
     let action = &shared["$defs"]["action"];
     assert!(action["properties"]["command"].is_object());
     assert!(action["properties"]["shell"].is_object());
+    assert!(action["properties"]["cwd"].is_object());
     assert_eq!(action["properties"]["icon"]["default"], "");
     assert_eq!(action["properties"]["description"]["default"], "");
     assert_eq!(

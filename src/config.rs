@@ -68,6 +68,8 @@ pub struct ActionConfig {
     #[serde(default)]
     pub shell: Option<String>,
     #[serde(default)]
+    pub cwd: Option<String>,
+    #[serde(default)]
     pub when: Vec<ActionCondition>,
     #[serde(default)]
     pub on_success: OnSuccess,
@@ -546,6 +548,9 @@ impl Config {
                     action.name
                 ),
             }
+            if action.cwd.as_ref().is_some_and(|cwd| cwd.trim().is_empty()) {
+                bail!("action '{}' cwd cannot be empty", action.name);
+            }
             if action
                 .key
                 .contains_key(KeyCode::Char('c'), KeyModifiers::CONTROL)
@@ -956,6 +961,7 @@ mod tests {
             description = "Focus the selected workspace"
             key = "ctrl-r"
             command = ["herdr", "workspace", "focus", "$id"]
+            cwd = "$checkout_path"
             when = [{ field = "focused", equals = false }]
 
             [[actions.items]]
@@ -975,6 +981,10 @@ mod tests {
             "Focus the selected workspace"
         );
         assert_eq!(config.actions.items[0].command.as_ref().unwrap()[3], "$id");
+        assert_eq!(
+            config.actions.items[0].cwd.as_deref(),
+            Some("$checkout_path")
+        );
         assert_eq!(config.actions.items[0].when[0].equals, Some(false.into()));
         assert_eq!(config.actions.items[1].on_success, OnSuccess::Refresh);
         let available = serde_json::json!({"focused": false})

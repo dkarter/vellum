@@ -56,7 +56,7 @@ Vellum SHALL show a padded in-process menu of actions for the selected item, inc
 
 ### Requirement: Execute actions safely
 
-Vellum SHALL execute argv commands directly without a shell, interpolate selected scalar fields by argument, and report failed or invalid actions without exiting.
+Vellum SHALL execute argv commands directly without a shell, interpolate selected scalar fields by argument and working directory, and report failed or invalid actions without exiting.
 
 #### Scenario: Argv interpolation preserves argument boundaries {#ACT-005}
 
@@ -69,6 +69,13 @@ Vellum SHALL execute argv commands directly without a shell, interpolate selecte
 - GIVEN an action command that exits unsuccessfully
 - WHEN it runs
 - THEN Vellum remains open and displays the exit status and stderr detail
+
+#### Scenario: Action working directory interpolates safely {#ACT-010}
+
+- GIVEN an action working directory that references a selected scalar field
+- WHEN the argv action runs
+- THEN the process uses that directory without invoking a shell
+- AND a missing, null, or non-scalar directory field fails before spawning
 
 ### Requirement: Refresh after successful actions
 
