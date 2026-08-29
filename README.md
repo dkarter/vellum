@@ -231,6 +231,28 @@ are checked in order, and `when` matches one or more exact source values. A toke
 can provide fixed `text` or animated frames. Segment styles override token
 styles.
 
+This also supports display-only field rewrites. For example, an agent name can
+be replaced with an icon label while an unconditional final definition keeps
+unmapped values visible:
+
+```toml
+template = [["$agent_label"]]
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+when = ["opencode"]
+text = " OpenCode"
+
+[[item.tokens]]
+name = "agent_label"
+source = "agent"
+```
+
+`examples/herdr-agents-icons.toml` contains a complete opt-in Herdr agent
+palette. Its agent logos use private-use glyphs and require a compatible patched
+font, so they are intentionally not part of the official `herdr-agents` palette.
+
 Colors accept Ratatui names such as `cyan`, `dark_gray`, and `reset`, or RGB hex
 values such as `#7aa2f7`. A color beginning with `$` reads its value from the
 source item, allowing live state-dependent colors.
