@@ -56,4 +56,4 @@ jobs:
           install_args: node aube
 
       - name: Build website
-        run: mise run website-build
+        run: mise run --skip-tools website-build
