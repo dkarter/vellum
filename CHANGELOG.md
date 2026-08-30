@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/dkarter/vellum/compare/v0.7.1...v0.8.0) (2026-08-30)
+
+
+### Features
+
+* add file-backed sources ([#20](https://github.com/dkarter/vellum/issues/20)) ([3a9ca07](https://github.com/dkarter/vellum/commit/3a9ca0740a9f8c0f49d663aecde0cae9e650013f))
+
 ## [0.7.1](https://github.com/dkarter/vellum/compare/v0.7.0...v0.7.1) (2026-08-30)
 
 
