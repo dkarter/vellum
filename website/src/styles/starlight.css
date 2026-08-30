@@ -24,9 +24,17 @@
 }
 
 .site-title img {
-  width: 1.7rem;
-  height: 2rem;
+  box-sizing: border-box;
+  width: 2rem;
+  height: 2.25rem;
   object-fit: contain;
+}
+
+:root[data-theme="light"] .site-title img {
+  padding: 0.18rem;
+  border-radius: 0.3rem;
+  background: #c95736;
+  box-shadow: 2px 2px 0 #17140f;
 }
 
 code {
