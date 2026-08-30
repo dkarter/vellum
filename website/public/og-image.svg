@@ -1,12 +1,73 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <rect width="1200" height="630" fill="#eee7d7"/>
-  <path d="M0 0h30v630H0zm1170 0h30v630h-30z" fill="#e8754f"/>
-  <text x="90" y="150" fill="#17140f" font-family="Georgia,serif" font-size="96" font-weight="700">Vellum</text>
-  <text x="94" y="215" fill="#6d6458" font-family="monospace" font-size="26">THE TERMINAL MENU, MADE YOURS.</text>
-  <rect x="90" y="270" width="1020" height="250" rx="12" fill="#17140f"/>
-  <text x="130" y="330" fill="#918779" font-family="monospace" font-size="22">Agents  /  status: working</text>
-  <text x="130" y="390" fill="#f2d792" font-family="monospace" font-size="28">› docs-website</text>
-  <text x="130" y="430" fill="#c9c0b2" font-family="monospace" font-size="20">  OpenCode · vellum · writing documentation</text>
-  <circle cx="1048" cy="381" r="9" fill="#85b88c"/>
-  <text x="130" y="485" fill="#e8754f" font-family="monospace" font-size="18">ctrl-a actions   ctrl-g filter   enter focus</text>
+  <rect width="1200" height="630" fill="#10121d"/>
+  <rect x="28" y="24" width="1144" height="582" fill="#181a27" stroke="#7ea5ff" stroke-width="2"/>
+
+  <g font-family="SFMono-Regular,Consolas,Liberation Mono,monospace">
+    <text x="50" y="58" fill="#83aaff" font-size="23">Jump to Workspace</text>
+    <path d="M282 52H1150" stroke="#83aaff"/>
+    <rect x="48" y="76" width="1104" height="83" fill="none" stroke="#59658e" stroke-width="2"/>
+    <rect x="60" y="68" width="143" height="18" fill="#181a27"/>
+    <text x="68" y="84" fill="#69749e" font-size="20">Workspaces</text>
+    <text x="63" y="128" fill="#cbd4fb" font-size="23">Switch workspace...</text>
+
+    <rect x="55" y="175" width="1090" height="73" fill="#2b3a61"/>
+    <text x="62" y="203" fill="#d4dcff" font-size="22" font-weight="700">dotfiles</text>
+    <rect x="62" y="218" width="13" height="10" rx="2" fill="#65709b"/>
+    <text x="84" y="229" fill="#65709b" font-size="18">~/dotfiles</text>
+    <circle cx="1030" cy="198" r="7" fill="none" stroke="#a2e6a4" stroke-width="2"/>
+    <text x="1046" y="205" fill="#a2e6a4" font-size="20">idle</text>
+    <rect x="1028" y="218" width="12" height="12" fill="none" stroke="#65709b" stroke-width="3"/>
+    <text x="1048" y="230" fill="#65709b" font-size="18">OpenCode</text>
+
+    <text x="62" y="278" fill="#cbd4fb" font-size="22" font-weight="700">foreman</text>
+    <rect x="62" y="293" width="13" height="10" rx="2" fill="#65709b"/>
+    <text x="84" y="304" fill="#65709b" font-size="18">~/dev/foreman</text>
+    <text x="1029" y="281" fill="#aaa9ae" font-size="20">· unknown</text>
+
+    <text x="62" y="350" fill="#cbd4fb" font-size="22" font-weight="700">vellum</text>
+    <rect x="62" y="365" width="13" height="10" rx="2" fill="#65709b"/>
+    <text x="84" y="376" fill="#65709b" font-size="18">~/dev/vellum</text>
+    <circle cx="1030" cy="344" r="7" fill="none" stroke="#a2e6a4" stroke-width="2"/>
+    <text x="1046" y="351" fill="#a2e6a4" font-size="20">idle</text>
+    <rect x="1028" y="363" width="12" height="12" fill="none" stroke="#65709b" stroke-width="3"/>
+    <text x="1048" y="376" fill="#65709b" font-size="18">OpenCode</text>
+
+    <text x="62" y="423" fill="#83aaff" font-size="22" font-weight="700">docs-website</text>
+    <rect x="62" y="438" width="13" height="10" rx="2" fill="#65709b"/>
+    <text x="84" y="449" fill="#65709b" font-size="18">~/.herdr/worktrees/vellum/docs-website</text>
+    <circle cx="1004" cy="417" r="7" fill="#efb75f"/>
+    <text x="1020" y="424" fill="#efb75f" font-size="20">working</text>
+    <rect x="1028" y="436" width="12" height="12" fill="none" stroke="#65709b" stroke-width="3"/>
+    <text x="1048" y="449" fill="#65709b" font-size="18">OpenCode</text>
+
+    <g>
+      <rect x="371" y="184" width="538" height="316" fill="#181a27" stroke="#7180ad" stroke-width="2"/>
+      <rect x="383" y="175" width="92" height="18" fill="#181a27"/>
+      <text x="390" y="191" fill="#69749e" font-size="20">Actions</text>
+      <text x="390" y="239" fill="#cbd4fb" font-size="20">›  Filter actions...</text>
+      <path d="M386 255H894" stroke="#69749e"/>
+
+      <rect x="386" y="284" width="508" height="65" fill="#2b3a61"/>
+      <text x="397" y="311" fill="#d4dcff" font-size="23">⌕</text>
+      <text x="435" y="310" fill="#d4dcff" font-size="20" font-weight="700">Focus workspace</text>
+      <text x="435" y="335" fill="#c2ccf4" font-size="17">Switch to the selected Herdr workspace</text>
+
+      <text x="397" y="380" fill="#cbd4fb" font-size="25">×</text>
+      <text x="435" y="379" fill="#cbd4fb" font-size="20" font-weight="700">Close workspace</text>
+      <text x="435" y="404" fill="#65709b" font-size="17">Close the selected Herdr workspace</text>
+
+      <text x="397" y="449" fill="#cbd4fb" font-size="20">●</text>
+      <text x="435" y="448" fill="#cbd4fb" font-size="20" font-weight="700">Open repository</text>
+      <text x="435" y="473" fill="#65709b" font-size="17">Open this checkout's repository on GitHub</text>
+    </g>
+
+    <rect x="39" y="557" width="88" height="33" fill="#9bd36a"/>
+    <text x="51" y="580" fill="#171827" font-size="20" font-weight="700">INSERT</text>
+    <text x="142" y="580" fill="#65709b" font-size="18">4/4</text>
+    <text x="226" y="580" fill="#65709b" font-size="18">up/down navigate</text>
+    <text x="433" y="580" fill="#65709b" font-size="18">enter select</text>
+    <text x="596" y="580" fill="#65709b" font-size="18">esc cancel</text>
+    <text x="735" y="580" fill="#65709b" font-size="18">ctrl-g status</text>
+    <text x="909" y="580" fill="#65709b" font-size="18">ctrl-a actions</text>
+  </g>
 </svg>

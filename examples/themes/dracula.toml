@@ -1,0 +1,11 @@
+#:schema ../../schemas/global.schema.json
+
+[theme]
+foreground = "#f8f8f2"
+background = "#282a36"
+selection_foreground = "#282a36"
+selection_background = "#bd93f9"
+border = "#6272a4"
+mode_foreground = "#282a36"
+insert_mode_background = "#50fa7b"
+normal_mode_background = "#f1fa8c"

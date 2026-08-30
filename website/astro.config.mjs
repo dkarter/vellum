@@ -25,11 +25,18 @@ export default defineConfig({
           tag: "meta",
           attrs: {
             property: "og:image:alt",
-            content: "Vellum terminal palette filtering live agent sessions",
+            content: "Vellum workspace palette with live status and native actions",
           },
         },
         { tag: "meta", attrs: { name: "twitter:card", content: "summary_large_image" } },
         { tag: "meta", attrs: { name: "twitter:image", content: socialImage } },
+        {
+          tag: "meta",
+          attrs: {
+            name: "twitter:image:alt",
+            content: "Vellum workspace palette with live status and native actions",
+          },
+        },
       ],
       sidebar: [
         {

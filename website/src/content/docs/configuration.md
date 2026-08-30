@@ -41,4 +41,6 @@ normal_mode_background = "#e0af68"
 
 Colors accept Ratatui names such as `cyan`, `dark_gray`, and `reset`, or RGB hex values. Some presentation colors can read a source field by using a value such as `$status_color`.
 
+Copy-ready [Tokyo Night, Catppuccin Mocha, Dracula, Gruvbox Dark, and Nord themes](https://github.com/dkarter/vellum/tree/main/examples/themes) are available in `examples/themes/`. Use one as your global `config.toml`, or copy its `[theme]` section into an existing global or palette configuration.
+
 See the [schema reference](../schemas/) for editor completion and the complete option inventory.

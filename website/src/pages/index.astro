@@ -13,6 +13,12 @@ const useCases = [
   ["03", "Agent selection", "Scan rich status, task, and repository context before choosing the right agent."],
   ["04", "File finding", "Search paths with fd, frecency ranking, file icons, and clean stdout composition."],
 ];
+const themes = [
+  { name: "Tokyo Night", bg: "#1a1b26", fg: "#c0caf5", muted: "#565f89", select: "#7aa2f7", mode: "#9ece6a" },
+  { name: "Catppuccin Mocha", bg: "#1e1e2e", fg: "#cdd6f4", muted: "#585b70", select: "#89b4fa", mode: "#a6e3a1" },
+  { name: "Gruvbox Dark", bg: "#282828", fg: "#ebdbb2", muted: "#665c54", select: "#d79921", mode: "#b8bb26" },
+  { name: "Nord", bg: "#2e3440", fg: "#d8dee9", muted: "#4c566a", select: "#88c0d0", mode: "#a3be8c" },
+];
 ---
 
 <!doctype html>
@@ -27,9 +33,13 @@ const useCases = [
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={socialImage} />
-    <meta property="og:image:alt" content="Vellum terminal palette filtering live agent sessions" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Vellum workspace palette with live status and native actions" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content={socialImage} />
+    <meta name="twitter:image:alt" content="Vellum workspace palette with live status and native actions" />
     <link rel="canonical" href={canonical} />
     <link rel="icon" href={`${base}/favicon.png`} />
     <title>Vellum: The fast menu for your terminal.</title>
@@ -61,52 +71,89 @@ const useCases = [
         </div>
 
         <div class="demo-wrap" data-vellum-demo data-step="0">
-          <div class="demo-label"><span>LIVE PALETTE</span><span data-demo-stage>ready</span></div>
-          <div class="terminal" role="img" aria-label="Animated Vellum palette demonstrating fuzzy search, multiline results, status updates, exact filters, and native actions">
-            <div class="terminal-title"><span>vellum / herdr-agents</span><span>live 750ms</span></div>
-            <div class="search-line">
-              <span class="prompt">›</span><span class="query" aria-hidden="true"><i>d</i><i>o</i></span><span class="cursor"></span>
-              <span class="filter-badge">● working</span>
-            </div>
+          <div class="demo-label"><span>HERDR / WORKSPACES</span><span data-demo-stage>ready</span></div>
+          <div class="terminal" role="img" aria-label="Animated Vellum workspace palette demonstrating fuzzy search, multiline results, live status updates, and native actions">
+            <div class="palette-title"><span>Jump to Workspace</span></div>
+            <fieldset class="palette-search">
+              <legend>Workspaces</legend>
+              <div class="search-box"><span class="placeholder">Switch workspace...</span><span class="query" aria-hidden="true"><i>d</i><i>o</i><i>c</i><i>s</i></span><span class="cursor"></span></div>
+            </fieldset>
             <div class="items" aria-hidden="true">
-              <div class="item item-docs selected">
-                <div><b><mark>d</mark><span>ocs-website</span></b><span class="state state-docs"><i></i><span class="before">blocked</span><span class="after">working</span></span></div>
-                <small>OpenCode · vellum</small>
-                <small>Implement documentation and landing page</small>
+              <div class="item item-dotfiles selected">
+                <div class="item-copy"><b>dotfiles</b><small><span class="folder">■</span> ~/dotfiles</small></div>
+                <div class="item-meta"><span class="state idle"><i></i> idle</span><small>▣ OpenCode</small></div>
               </div>
-              <div class="item item-core">
-                <div><b>core-runtime</b><span class="state"><i></i> working</span></div>
-                <small>Claude · vellum</small>
-                <small>Improve source cancellation</small>
+              <div class="item item-foreman">
+                <div class="item-copy"><b>foreman</b><small><span class="folder">■</span> ~/dev/foreman</small></div>
+                <div class="item-meta"><span class="state unknown">· unknown</span></div>
               </div>
-              <div class="item item-done">
-                <div><b>release-check</b><span class="state"><i></i> done</span></div>
-                <small>OpenCode · vellum</small>
-                <small>Verify 0.8.0 artifacts</small>
+              <div class="item item-lnr">
+                <div class="item-copy"><b>lnr</b><small><span class="folder">■</span> ~/dev/lnr</small></div>
+                <div class="item-meta"><span class="state idle"><i></i> idle</span><small>▣ OpenCode</small></div>
+              </div>
+              <div class="item item-vellum">
+                <div class="item-copy"><b>vellum</b><small><span class="folder">■</span> ~/dev/vellum</small></div>
+                <div class="item-meta"><span class="state idle"><i></i> idle</span><small>▣ OpenCode</small></div>
+              </div>
+              <div class="item item-docs">
+                <div class="item-copy"><b><mark>docs</mark><span>-website</span></b><small><span class="folder">■</span> ~/.herdr/worktrees/vellum/docs-website</small></div>
+                <div class="item-meta"><span class="state state-docs"><i></i><span class="before">idle</span><span class="after">working</span></span><small>▣ OpenCode</small></div>
               </div>
             </div>
-            <div class="action-menu" aria-hidden="true">
-              <div class="action-head">Actions <span>docs-website</span></div>
-              <div class="action selected"><span>↗</span><b>Focus session</b><kbd>enter</kbd></div>
-              <div class="action"><span>◎</span><b>Open repository</b></div>
-              <div class="command">argv: ["herdr", "agent", "focus", "$pane_id"]</div>
-            </div>
-            <div class="terminal-foot"><span>INSERT</span><span class="foot-copy">ctrl-g filter · ctrl-a actions</span><span>1 / 3</span></div>
+            <fieldset class="action-menu" aria-hidden="true">
+              <legend>Actions</legend>
+              <div class="action-search"><span>›</span> Filter actions...</div>
+              <div class="action selected"><span>⌕</span><div><b>Focus workspace</b><small>Switch to the selected Herdr workspace</small></div></div>
+              <div class="action"><span>×</span><div><b>Close workspace</b><small>Close the selected Herdr workspace</small></div></div>
+              <div class="action"><span>◉</span><div><b>Open repository</b><small>Open this checkout's repository on GitHub</small></div></div>
+            </fieldset>
+            <div class="terminal-foot"><span>INSERT</span><span class="result-count"><span class="before">5/5</span><span class="after">1/5</span></span><span class="foot-copy">up/down navigate&nbsp;&nbsp; enter select&nbsp;&nbsp; esc cancel&nbsp;&nbsp; ctrl-g status&nbsp;&nbsp; ctrl-a actions</span></div>
           </div>
           <div class="demo-controls">
             <p class="sr-only" aria-live="polite" data-demo-live>Vellum palette ready.</p>
             <button type="button" data-demo-replay>Replay demo <span>↻</span></button>
             <ol aria-label="Demo sequence">
-              <li data-dot="1">fuzzy</li><li data-dot="2">refresh</li><li data-dot="3">filter</li><li data-dot="4">action</li>
+              <li data-dot="1">search</li><li data-dot="2">select</li><li data-dot="3">refresh</li><li data-dot="4">actions</li>
             </ol>
           </div>
         </div>
       </section>
 
-      <section class="statement shell">
-        <p class="kicker">A thin layer, not a new world</p>
-        <h2>Keep your commands.<br />Make them <em>legible.</em></h2>
-        <p>Vellum reads structured data and gives it the interaction it deserves: a compact terminal interface that can show more than a label and stay current while you search.</p>
+      <section class="statement shell" aria-labelledby="statement-title">
+        <div class="statement-copy">
+          <p class="kicker">A thin layer, not a new world</p>
+          <h2 id="statement-title">Pipe data in.<br /><em>Pick what matters.</em></h2>
+          <p>Keep the commands and scripts you trust. Vellum turns their structured output into a searchable, live interface without taking over your workflow.</p>
+        </div>
+        <div class="transform-demo" role="img" aria-label="A shell command emitting structured workspace data that Vellum turns into a searchable menu">
+          <div class="raw-output">
+            <div class="visual-label"><span>01</span> COMMAND OUTPUT</div>
+            <div class="command-line"><span>$</span> herdr api snapshot</div>
+            <pre><code><span>[</span>
+  &#123;
+    <b>"label"</b>: <i>"dotfiles"</i>,
+    <b>"path"</b>: <i>"~/dotfiles"</i>,
+    <b>"status"</b>: <i>"idle"</i>,
+    <b>"agent"</b>: <i>"OpenCode"</i>
+  &#125;,
+  &#123;
+    <b>"label"</b>: <i>"vellum"</i>,
+    <b>"path"</b>: <i>"~/dev/vellum"</i>,
+    <b>"status"</b>: <i>"working"</i>,
+    <b>"agent"</b>: <i>"OpenCode"</i>
+  &#125;
+<span>]</span></code></pre>
+          </div>
+          <div class="transform-arrow"><span>JSON</span><i>→</i></div>
+          <div class="menu-output">
+            <div class="visual-label"><span>02</span> VELLUM</div>
+            <div class="mini-menu">
+              <fieldset><legend>Workspaces</legend><span>vel</span><i></i></fieldset>
+              <div class="mini-result"><div><b>vellum</b><small>~/dev/vellum</small></div><div><span>● working</span><small>OpenCode</small></div></div>
+              <footer><b>INSERT</b><span>1/2</span><span>enter select</span></footer>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="use-cases shell" aria-labelledby="use-cases-title">
@@ -116,6 +163,29 @@ const useCases = [
         </div>
         <div class="case-grid">
           {useCases.map(([number, title, body]) => <article><span>{number}</span><h3>{title}</h3><p>{body}</p></article>)}
+        </div>
+      </section>
+
+      <section class="themes shell" aria-labelledby="themes-title">
+        <div class="theme-copy">
+          <p class="kicker">Your terminal, your colors</p>
+          <h2 id="themes-title">Looks at home.<br /><em>In every setup.</em></h2>
+          <p>Set eight colors in TOML to match the rest of your terminal. Use named terminal colors or exact hex values, globally or per palette.</p>
+          <a href={`${base}/docs/configuration/#theme-example`}>Configure your theme →</a>
+          <a class="theme-examples-link" href="https://github.com/dkarter/vellum/tree/main/examples/themes">Browse theme files →</a>
+        </div>
+        <div class="theme-grid" aria-label="Vellum theme examples">
+          {themes.map((theme) => (
+            <article class="theme-card" style={`--preview-bg:${theme.bg};--preview-fg:${theme.fg};--preview-muted:${theme.muted};--preview-select:${theme.select};--preview-mode:${theme.mode}`}>
+              <div class="theme-preview">
+                <div class="theme-input">Search workspaces...</div>
+                <div class="theme-row"><b>dotfiles</b><span>idle</span></div>
+                <div class="theme-row selected"><b>vellum</b><span>working</span></div>
+                <div class="theme-mode">INSERT</div>
+              </div>
+              <h3>{theme.name}</h3>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -178,14 +248,14 @@ template = [
       const stage = demo?.querySelector<HTMLElement>("[data-demo-stage]");
       const live = demo?.querySelector<HTMLElement>("[data-demo-live]");
       const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
-      const labels = ["ready", "fuzzy search", "live refresh", "exact filter", "native action", "complete"];
+      const labels = ["ready", "fuzzy search", "selection", "live refresh", "native actions", "complete"];
       const announcements = [
         "Vellum palette ready.",
-        "Fuzzy search entered: do. Docs website is selected.",
-        "Live source refresh changed docs website from blocked to working.",
-        "Exact status filter applied: working.",
+        "Fuzzy search entered: docs.",
+        "Docs website is selected.",
+        "Live source refresh changed docs website from idle to working.",
         "Native action menu opened for docs website.",
-        "Demo complete. Focus session action is ready.",
+        "Demo complete. Focus workspace action is ready.",
       ];
       let timers: number[] = [];
 
