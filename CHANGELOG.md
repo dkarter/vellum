@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/dkarter/vellum/compare/v0.8.0...v0.9.0) (2026-08-30)
+
+
+### Features
+
+* add stdin sources ([#25](https://github.com/dkarter/vellum/issues/25)) ([393a342](https://github.com/dkarter/vellum/commit/393a34230f151662b2885a0cc2b2a12c15343361))
+
 ## [0.8.0](https://github.com/dkarter/vellum/compare/v0.7.1...v0.8.0) (2026-08-30)
 
 
