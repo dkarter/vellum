@@ -106,9 +106,9 @@ remain unchanged.
 ### Requirement: Select exactly one source kind
 
 After global and palette layers merge, Vellum SHALL select exactly one of
-`source.cmd`, `source.builtin`, or `source.file`. A source kind explicitly set by
-the palette SHALL replace an inherited source kind while retaining unrelated
-source options such as `refresh_ms`.
+`source.cmd`, `source.builtin`, `source.file`, or `source.stdin`. A source kind
+explicitly set by the palette SHALL replace an inherited source kind while
+retaining unrelated source options such as `refresh_ms`.
 
 #### Scenario: File source participates in source-kind merging {#SRC-014}
 
@@ -121,3 +121,40 @@ source options such as `refresh_ms`.
 - GIVEN a configured file source whose contents change after an initial load
 - WHEN Vellum runs the same source configuration again for refresh
 - THEN the new file contents are returned as source items
+
+### Requirement: Load source items from standard input
+
+Vellum SHALL accept a one-shot JSON array or NDJSON stream from standard input
+when `source.stdin = true`.
+
+#### Scenario: Standard input is parsed as JSON source items {#SRC-016}
+
+- GIVEN a palette with `source.stdin = true` and JSON or NDJSON on standard input
+- WHEN Vellum loads the source before starting the terminal interface
+- THEN each object becomes one source item
+
+#### Scenario: Standard input is a non-refreshable source kind {#SRC-017}
+
+- GIVEN global and palette layers using standard input and other source kinds
+- WHEN Vellum merges and validates the configuration
+- THEN standard input participates in mutually exclusive source-kind replacement
+- AND periodic or action-triggered refresh is rejected because standard input cannot be replayed
+
+#### Scenario: Plain lines become named source fields {#SRC-018}
+
+- GIVEN plain-text lines on standard input and a requested field name
+- WHEN Vellum loads the line stream
+- THEN each nonempty line becomes one object containing that field
+
+#### Scenario: Simple field mappings reshape JSON objects {#SRC-019}
+
+- GIVEN JSON source objects and one or more `TARGET=SOURCE` mappings
+- WHEN Vellum loads the standard-input source
+- THEN each target contains the value from the source object's dotted field path
+
+#### Scenario: Automatic stdin accepts plain lines {#SRC-020}
+
+- GIVEN non-JSON lines on standard input and automatic stdin mode
+- WHEN Vellum loads the source
+- THEN each nonempty line becomes one item with matching `value`, `name`, and `path` fields
+- AND JSON arrays and NDJSON objects retain their structured fields

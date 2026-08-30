@@ -63,3 +63,9 @@ Vellum SHALL configure Taplo to use the bundled schema for example TOML files.
 - WHEN their source fields are inspected
 - THEN both schemas document `source.file` alongside command and built-in sources
 - AND the file field describes supported data file extensions and declaration-relative paths
+
+#### Scenario: Shared schema describes standard-input sources {#SCH-009}
+
+- GIVEN the global and palette schema entry points and their shared option definitions
+- WHEN their source fields are inspected
+- THEN both schemas document `source.stdin` as a one-shot source alongside command, built-in, and file sources

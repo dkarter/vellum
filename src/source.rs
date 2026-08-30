@@ -1,8 +1,8 @@
 use std::{
     fs,
-    io::Read,
+    io::{self, BufRead, BufReader, Read},
     path::Path,
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
 };
 
 use anyhow::{Context, Result, bail};
@@ -14,6 +14,26 @@ use crate::config::SourceConfig;
 
 pub type SourceItem = Map<String, Value>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StdinSource {
+    pub mode: StdinMode,
+    pub fields: Vec<FieldMapping>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StdinMode {
+    Auto,
+    Json,
+    Lines { field: String },
+    Jq { filter: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldMapping {
+    pub target: String,
+    pub source: String,
+}
+
 pub fn run(source: &SourceConfig) -> Result<Vec<SourceItem>> {
     if let Some(builtin) = source.builtin {
         return builtin.run();
@@ -21,15 +41,219 @@ pub fn run(source: &SourceConfig) -> Result<Vec<SourceItem>> {
     if let Some(path) = &source.file {
         return load_file(path);
     }
+    if source.stdin {
+        return run_stdin(&StdinSource {
+            mode: StdinMode::Json,
+            fields: Vec::new(),
+        });
+    }
     let command = source
         .cmd
         .as_deref()
-        .context("source has no cmd, builtin, or file")?;
+        .context("source has no cmd, builtin, file, or stdin")?;
     let stdout = command_output(
         Command::new("sh").args(["-c", command]),
         &format!("source command: {command}"),
     )?;
     parse(&stdout)
+}
+
+pub fn run_stdin(source: &StdinSource) -> Result<Vec<SourceItem>> {
+    let items = match &source.mode {
+        StdinMode::Auto => {
+            parse_auto(io::stdin().lock()).context("failed to read source from stdin")
+        }
+        StdinMode::Json => {
+            parse_reader(io::stdin().lock()).context("failed to read source from stdin")
+        }
+        StdinMode::Lines { field } => parse_lines(io::stdin().lock(), field),
+        StdinMode::Jq { filter } => run_jq(filter),
+    }
+    .context("failed to parse stdin source")?;
+    apply_field_mappings(items, &source.fields)
+}
+
+fn parse_auto(reader: impl Read) -> Result<Vec<SourceItem>> {
+    let mut reader = BufReader::new(reader);
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if reader
+            .read_line(&mut line)
+            .context("failed to read stdin source")?
+            == 0
+        {
+            return Ok(Vec::new());
+        }
+        if !line.trim().is_empty() {
+            break;
+        }
+    }
+
+    if line.trim_start().starts_with('[') {
+        return parse_reader(io::Cursor::new(line.into_bytes()).chain(reader));
+    }
+    if let Ok(Value::Object(first)) = serde_json::from_str(line.trim()) {
+        let mut items = vec![first];
+        loop {
+            line.clear();
+            if reader
+                .read_line(&mut line)
+                .context("failed to read stdin source")?
+                == 0
+            {
+                break;
+            }
+            if line.trim().is_empty() {
+                continue;
+            }
+            let value = serde_json::from_str(&line).context("invalid NDJSON source item")?;
+            items.push(expect_object(value)?);
+        }
+        return Ok(items);
+    }
+
+    let mut items = vec![plain_line_item(line.trim_end_matches(['\r', '\n']))];
+    loop {
+        line.clear();
+        if reader
+            .read_line(&mut line)
+            .context("failed to read stdin source")?
+            == 0
+        {
+            break;
+        }
+        let value = line.trim_end_matches(['\r', '\n']);
+        if !value.is_empty() {
+            items.push(plain_line_item(value));
+        }
+    }
+    Ok(items)
+}
+
+fn plain_line_item(line: &str) -> SourceItem {
+    ["value", "name", "path"]
+        .into_iter()
+        .map(|field| (field.to_owned(), Value::String(line.to_owned())))
+        .collect()
+}
+
+pub fn load_json(path: &Path) -> Result<Vec<SourceItem>> {
+    let file = fs::File::open(path)
+        .with_context(|| format!("failed to read stdin source cache {}", path.display()))?;
+    parse_reader(file)
+        .with_context(|| format!("failed to parse stdin source cache {}", path.display()))
+}
+
+fn run_jq(filter: &str) -> Result<Vec<SourceItem>> {
+    let mut child = Command::new("jq")
+        .args(["-c", filter])
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::piped())
+        .spawn()
+        .context("failed to run stdin jq filter")?;
+    let stdout = child
+        .stdout
+        .take()
+        .context("failed to capture stdin jq filter output")?;
+    let items = parse_reader(stdout);
+    let status = child.wait().context("failed to wait for stdin jq filter")?;
+    if !status.success() {
+        bail!("stdin jq filter exited with {status}");
+    }
+    items
+}
+
+fn parse_reader(reader: impl Read) -> Result<Vec<SourceItem>> {
+    let mut reader = BufReader::new(reader);
+    loop {
+        let buffer = reader.fill_buf().context("failed to read JSON source")?;
+        let Some(index) = buffer.iter().position(|byte| !byte.is_ascii_whitespace()) else {
+            let consumed = buffer.len();
+            if consumed == 0 {
+                return Ok(Vec::new());
+            }
+            reader.consume(consumed);
+            continue;
+        };
+        reader.consume(index);
+        break;
+    }
+
+    if reader
+        .fill_buf()
+        .context("failed to read JSON source")?
+        .first()
+        == Some(&b'[')
+    {
+        serde_json::from_reader(reader)
+            .context("invalid JSON source array; each source item must be a JSON object")
+    } else {
+        let mut items = Vec::new();
+        let mut line = String::new();
+        loop {
+            line.clear();
+            if reader
+                .read_line(&mut line)
+                .context("failed to read JSON source")?
+                == 0
+            {
+                break;
+            }
+            if line.trim().is_empty() {
+                continue;
+            }
+            let value = serde_json::from_str(&line).context("invalid NDJSON source item")?;
+            items.push(expect_object(value)?);
+        }
+        Ok(items)
+    }
+}
+
+fn parse_lines(reader: impl Read, field: &str) -> Result<Vec<SourceItem>> {
+    BufReader::new(reader)
+        .lines()
+        .filter_map(|line| match line {
+            Ok(line) if line.is_empty() => None,
+            result => Some(result),
+        })
+        .map(|line| {
+            let mut item = SourceItem::new();
+            item.insert(
+                field.to_owned(),
+                Value::String(line.context("failed to read source from stdin")?),
+            );
+            Ok(item)
+        })
+        .collect()
+}
+
+fn apply_field_mappings(
+    mut items: Vec<SourceItem>,
+    mappings: &[FieldMapping],
+) -> Result<Vec<SourceItem>> {
+    for (index, item) in items.iter_mut().enumerate() {
+        let values = mappings
+            .iter()
+            .map(|mapping| {
+                crate::item::field_value(item, &mapping.source)
+                    .cloned()
+                    .with_context(|| {
+                        format!(
+                            "stdin item {} has no field '{}' for mapping '{}={}'",
+                            index + 1,
+                            mapping.source,
+                            mapping.target,
+                            mapping.source
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for (mapping, value) in mappings.iter().zip(values) {
+            item.insert(mapping.target.clone(), value);
+        }
+    }
+    Ok(items)
 }
 
 fn load_file(path: &Path) -> Result<Vec<SourceItem>> {
@@ -90,25 +314,7 @@ pub(crate) fn ensure_success(label: &str, output: &Output) -> Result<()> {
 }
 
 pub fn parse(input: &str) -> Result<Vec<SourceItem>> {
-    let input = input.trim();
-    if input.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    if input.starts_with('[') {
-        let values: Vec<Value> =
-            serde_json::from_str(input).context("invalid JSON source array")?;
-        return values.into_iter().map(expect_object).collect();
-    }
-
-    input
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| {
-            let value = serde_json::from_str(line).context("invalid NDJSON source item")?;
-            expect_object(value)
-        })
-        .collect()
+    parse_reader(input.as_bytes())
 }
 
 fn expect_object(value: Value) -> Result<SourceItem> {
@@ -250,11 +456,65 @@ mod tests {
         assert_eq!(run(&source).unwrap()[0]["id"], "after");
     }
 
+    #[test]
+    fn src_016_standard_input_is_parsed_as_json_source_items() {
+        let mut input = &b"{\"id\":1}\n{\"id\":2}\n"[..];
+
+        let items = parse_reader(&mut input).unwrap();
+
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[1]["id"], 2);
+    }
+
+    #[test]
+    fn src_018_plain_lines_become_named_source_fields() {
+        let items = parse_lines(&b"first\n\nsecond\n"[..], "name").unwrap();
+
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["name"], "first");
+        assert_eq!(items[1]["name"], "second");
+    }
+
+    #[test]
+    fn src_019_simple_field_mappings_reshape_json_objects() {
+        let items = parse(r#"[{"id":"original","details":{"name":"First"}}]"#).unwrap();
+        let mappings = vec![
+            FieldMapping {
+                target: "id".into(),
+                source: "details.name".into(),
+            },
+            FieldMapping {
+                target: "value".into(),
+                source: "id".into(),
+            },
+        ];
+
+        let items = apply_field_mappings(items, &mappings).unwrap();
+
+        assert_eq!(items[0]["id"], "First");
+        assert_eq!(items[0]["value"], "original");
+    }
+
+    #[test]
+    fn src_020_automatic_stdin_accepts_plain_lines_and_structured_json() {
+        let lines = parse_auto(&b"  first  \n\nsecond\n"[..]).unwrap();
+        let json = parse_auto(&br#"[{"id":1}]"#[..]).unwrap();
+        let ndjson = parse_auto(&b"{\"id\":2}\n{\"id\":3}\n"[..]).unwrap();
+
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0]["value"], "  first  ");
+        assert_eq!(lines[0]["name"], "  first  ");
+        assert_eq!(lines[0]["path"], "  first  ");
+        assert_eq!(json[0]["id"], 1);
+        assert_eq!(ndjson[1]["id"], 3);
+    }
+
     fn command_source(command: &str) -> SourceConfig {
         SourceConfig {
             cmd: Some(command.into()),
             builtin: None,
             file: None,
+            stdin: false,
             refresh_ms: 0,
         }
     }
@@ -264,6 +524,7 @@ mod tests {
             cmd: None,
             builtin: None,
             file: Some(path.to_owned()),
+            stdin: false,
             refresh_ms: 0,
         }
     }

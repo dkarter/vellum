@@ -38,7 +38,7 @@
 
 ## Sources
 
-- [ ] Add stdin as a source for pipeline composition.
+- [x] Add stdin as a source for pipeline composition.
 - [ ] Stream NDJSON items into the interface as they arrive.
 - [ ] Cancel obsolete source processes when a refresh supersedes them.
 - [ ] Preserve responsive search and selection while sources are still loading.

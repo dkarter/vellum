@@ -1,11 +1,18 @@
 use std::{
-    env, fs,
+    env,
+    fs::{self, OpenOptions},
     io::{self, Write},
     path::PathBuf,
+    process::{Command, Stdio},
     sync::mpsc::{self, Receiver, TryRecvError},
     thread,
     time::{Duration, Instant},
 };
+
+#[cfg(unix)]
+use std::os::fd::AsFd;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 use anyhow::{Context, Result, bail};
 use crossterm::{
@@ -25,6 +32,14 @@ use vellum::{
 
 const REFRESH_POLL_RATE: Duration = Duration::from_millis(50);
 const MAX_EVENTS_PER_TICK: usize = 64;
+const STDIN_PALETTE: &str = r#"
+[source]
+stdin = true
+
+[item]
+template = [["$value"]]
+value = "$value"
+"#;
 type Tui = Terminal<CrosstermBackend<io::Stderr>>;
 
 struct TerminalSession {
@@ -33,8 +48,8 @@ struct TerminalSession {
 }
 
 fn main() -> Result<()> {
-    let palette_request = match cli(env::args().skip(1))? {
-        Cli::Run(palette) => palette,
+    let run_request = match cli(env::args().skip(1))? {
+        Cli::Run(options) => options,
         Cli::PalettesSync { overwrite } => {
             let root = config_root().context(
                 "HOME and XDG_CONFIG_HOME are both unset; cannot locate the palette directory",
@@ -52,10 +67,18 @@ fn main() -> Result<()> {
         }
     };
     let config_root = config_root();
-    let palette_path = palette_path(&palette_request, config_root.as_deref())?;
+    let palette_path = if run_request.default_stdin_palette {
+        PathBuf::from("<stdin>")
+    } else {
+        palette_path(&run_request.palette, config_root.as_deref())?
+    };
     let palette_key = palette_identity(&palette_path);
-    let palette = fs::read_to_string(&palette_path)
-        .with_context(|| format!("failed to read palette {}", palette_path.display()))?;
+    let palette = if run_request.default_stdin_palette {
+        STDIN_PALETTE.to_owned()
+    } else {
+        fs::read_to_string(&palette_path)
+            .with_context(|| format!("failed to read palette {}", palette_path.display()))?
+    };
     let global_path = config_root.map(|root| root.join("config.toml"));
     let global = match &global_path {
         Some(global_path) => match fs::read_to_string(global_path) {
@@ -69,8 +92,37 @@ fn main() -> Result<()> {
         None => None,
     };
     let global = global.as_deref().zip(global_path.as_deref());
-    let config = Config::parse_layered_files(global, (&palette, &palette_path))?;
-    let source_items = source::run(&config.source)?;
+    let mut config = Config::parse_layered_files(global, (&palette, &palette_path))?;
+    let stdin_source = if run_request.source_cache.is_none() {
+        run_request.stdin.clone().or_else(|| {
+            config.source.stdin.then(|| source::StdinSource {
+                mode: source::StdinMode::Json,
+                fields: Vec::new(),
+            })
+        })
+    } else {
+        None
+    };
+    if let Some(stdin) = &stdin_source {
+        if config.actions.has_refresh_action() {
+            bail!("stdin CLI sources cannot be used with action on_success = 'refresh'");
+        }
+        let items = source::run_stdin(stdin)?;
+        return rerun_with_terminal_input(
+            &run_request.palette,
+            run_request.default_stdin_palette,
+            &items,
+        );
+    }
+    let source_items = if let Some(cache) = &run_request.source_cache {
+        if config.actions.has_refresh_action() {
+            bail!("stdin CLI sources cannot be used with action on_success = 'refresh'");
+        }
+        config.source.refresh_ms = 0;
+        source::load_json(cache)?
+    } else {
+        source::run(&config.source)?
+    };
     let mut frecency = if config.frecency.enabled {
         let root = data_root().context(
             "HOME, XDG_DATA_HOME, and VELLUM_DATA are unset; cannot store frecency data",
@@ -391,10 +443,18 @@ fn receive_availability(
 
 #[derive(Debug, PartialEq, Eq)]
 enum Cli {
-    Run(String),
+    Run(RunOptions),
     PalettesSync { overwrite: bool },
     Help,
     Version,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct RunOptions {
+    palette: String,
+    stdin: Option<source::StdinSource>,
+    source_cache: Option<PathBuf>,
+    default_stdin_palette: bool,
 }
 
 fn cli(args: impl Iterator<Item = String>) -> Result<Cli> {
@@ -405,14 +465,183 @@ fn cli(args: impl Iterator<Item = String>) -> Result<Cli> {
         .collect::<Vec<_>>()
         .as_slice()
     {
-        [] => Ok(Cli::Run("default".into())),
         ["-h" | "--help"] => Ok(Cli::Help),
         ["-V" | "--version"] => Ok(Cli::Version),
         ["palettes", "sync"] => Ok(Cli::PalettesSync { overwrite: false }),
         ["palettes", "sync", "--overwrite"] => Ok(Cli::PalettesSync { overwrite: true }),
-        [palette] => Ok(Cli::Run((*palette).to_owned())),
-        _ => bail!("invalid arguments; run 'vellum --help' for usage"),
+        _ => parse_run_options(&args).map(Cli::Run),
     }
+}
+
+fn parse_run_options(args: &[String]) -> Result<RunOptions> {
+    let mut palette = None;
+    let mut mode = None;
+    let mut fields = Vec::new();
+    let mut source_cache = None;
+    let mut default_stdin_palette = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--stdin" => set_stdin_mode(&mut mode, source::StdinMode::Auto)?,
+            "--lines" => {
+                index += 1;
+                let field = required_flag_value(args, index, "--lines")?;
+                set_stdin_mode(
+                    &mut mode,
+                    source::StdinMode::Lines {
+                        field: field.to_owned(),
+                    },
+                )?;
+            }
+            "--jq" => {
+                index += 1;
+                let filter = required_flag_value(args, index, "--jq")?;
+                set_stdin_mode(
+                    &mut mode,
+                    source::StdinMode::Jq {
+                        filter: filter.to_owned(),
+                    },
+                )?;
+            }
+            "--field" => {
+                index += 1;
+                let mapping = required_flag_value(args, index, "--field")?;
+                let (target, source_path) = mapping.split_once('=').with_context(|| {
+                    format!("invalid --field '{mapping}'; expected TARGET=SOURCE")
+                })?;
+                if target.is_empty() || source_path.is_empty() {
+                    bail!("invalid --field '{mapping}'; expected nonempty TARGET=SOURCE");
+                }
+                fields.push(source::FieldMapping {
+                    target: target.to_owned(),
+                    source: source_path.to_owned(),
+                });
+            }
+            "--stdin-cache" => {
+                index += 1;
+                let path = required_flag_value(args, index, "--stdin-cache")?;
+                if source_cache.replace(PathBuf::from(path)).is_some() {
+                    bail!("--stdin-cache may only be set once");
+                }
+            }
+            "--stdin-default-palette" => default_stdin_palette = true,
+            argument if argument.starts_with('-') => {
+                bail!("unknown option '{argument}'; run 'vellum --help' for usage")
+            }
+            argument if palette.is_none() => palette = Some(argument.to_owned()),
+            _ => bail!("invalid arguments; run 'vellum --help' for usage"),
+        }
+        index += 1;
+    }
+    if !fields.is_empty() && mode.is_none() {
+        bail!("--field requires --stdin, --lines, or --jq");
+    }
+    if mode.is_some() && source_cache.is_some() {
+        bail!("stdin source options conflict with internal source cache");
+    }
+    let default_stdin_palette = default_stdin_palette
+        || (palette.is_none() && matches!(mode, Some(source::StdinMode::Auto)));
+    Ok(RunOptions {
+        palette: palette.unwrap_or_else(|| "default".into()),
+        stdin: mode.map(|mode| source::StdinSource { mode, fields }),
+        source_cache,
+        default_stdin_palette,
+    })
+}
+
+fn required_flag_value<'a>(args: &'a [String], index: usize, flag: &str) -> Result<&'a str> {
+    args.get(index)
+        .filter(|value| !value.is_empty() && !value.starts_with("--"))
+        .map(String::as_str)
+        .with_context(|| format!("{flag} requires a value"))
+}
+
+struct SourceCache(PathBuf);
+
+impl Drop for SourceCache {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+fn rerun_with_terminal_input(
+    palette: &str,
+    default_stdin_palette: bool,
+    items: &[source::SourceItem],
+) -> Result<()> {
+    let cache = write_source_cache(items)?;
+    let terminal_input = open_terminal_input()?;
+    let mut command =
+        Command::new(env::current_exe().context("failed to locate Vellum executable")?);
+    if !default_stdin_palette {
+        command.arg(palette);
+    }
+    command.arg("--stdin-cache").arg(&cache.0);
+    if default_stdin_palette {
+        command.arg("--stdin-default-palette");
+    }
+    let status = command
+        .stdin(Stdio::from(terminal_input))
+        .status()
+        .context("failed to restart Vellum with terminal input")?;
+    drop(cache);
+    if status.success() {
+        Ok(())
+    } else {
+        std::process::exit(status.code().unwrap_or(1));
+    }
+}
+
+#[cfg(unix)]
+fn open_terminal_input() -> Result<fs::File> {
+    let terminal = io::stderr()
+        .as_fd()
+        .try_clone_to_owned()
+        .context("failed to duplicate the terminal for interactive input")?;
+    Ok(fs::File::from(terminal))
+}
+
+#[cfg(not(unix))]
+fn open_terminal_input() -> Result<fs::File> {
+    bail!("stdin sources require a Unix terminal")
+}
+
+fn write_source_cache(items: &[source::SourceItem]) -> Result<SourceCache> {
+    for attempt in 0..100 {
+        let path = env::temp_dir().join(format!(
+            "vellum-stdin-{}-{attempt}.json",
+            std::process::id()
+        ));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        let file = options.open(&path);
+        match file {
+            Ok(mut file) => {
+                if let Err(error) = serde_json::to_writer(&mut file, items) {
+                    let _ = fs::remove_file(&path);
+                    return Err(error).context("failed to write stdin source cache");
+                }
+                if let Err(error) = file.flush() {
+                    let _ = fs::remove_file(&path);
+                    return Err(error).context("failed to flush stdin source cache");
+                }
+                return Ok(SourceCache(path));
+            }
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error).context("failed to create stdin source cache"),
+        }
+    }
+    bail!("failed to create a unique stdin source cache")
+}
+
+fn set_stdin_mode(target: &mut Option<source::StdinMode>, mode: source::StdinMode) -> Result<()> {
+    if target.is_some() {
+        bail!("use only one of --stdin, --lines, or --jq");
+    }
+    *target = Some(mode);
+    Ok(())
 }
 
 fn config_root() -> Option<PathBuf> {
@@ -470,7 +699,7 @@ fn palette_identity(path: &std::path::Path) -> String {
 
 fn print_help() {
     println!(
-        "Vellum {}\n\nUsage:\n  vellum [PALETTE]\n  vellum palettes sync [--overwrite]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nCommands:\n  palettes sync  Install bundled palettes without replacing existing files\n\nOptions:\n  --overwrite    Replace existing official palette files during sync\n  -h, --help     Print help\n  -V, --version  Print version",
+        "Vellum {}\n\nUsage:\n  vellum [PALETTE] [SOURCE OPTIONS]\n  vellum palettes sync [--overwrite]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nCommands:\n  palettes sync  Install bundled palettes without replacing existing files\n\nSource options:\n  --stdin                 Auto-detect plain lines, JSON, or NDJSON from standard input\n  --lines FIELD           Wrap each nonempty input line as {{FIELD: line}}\n  --field TARGET=SOURCE   Copy a dotted source field to a target field (repeatable)\n  --jq FILTER             Transform standard-input JSON through jq\n\nOptions:\n  --overwrite    Replace existing official palette files during sync\n  -h, --help     Print help\n  -V, --version  Print version",
         env!("CARGO_PKG_VERSION")
     );
 }
@@ -511,7 +740,15 @@ mod tests {
     #[test]
     fn cli_001_explicit_config_path_wins() {
         let command = cli(["custom.toml".into()].into_iter()).unwrap();
-        assert_eq!(command, Cli::Run("custom.toml".into()));
+        assert_eq!(
+            command,
+            Cli::Run(RunOptions {
+                palette: "custom.toml".into(),
+                stdin: None,
+                source_cache: None,
+                default_stdin_palette: false,
+            })
+        );
     }
 
     #[test]
@@ -541,7 +778,15 @@ mod tests {
 
     #[test]
     fn cli_005_defaults_to_the_default_named_palette() {
-        assert_eq!(cli(std::iter::empty()).unwrap(), Cli::Run("default".into()));
+        assert_eq!(
+            cli(std::iter::empty()).unwrap(),
+            Cli::Run(RunOptions {
+                palette: "default".into(),
+                stdin: None,
+                source_cache: None,
+                default_stdin_palette: false,
+            })
+        );
     }
 
     #[test]
@@ -585,6 +830,61 @@ mod tests {
             cli(["palettes".into(), "sync".into(), "--overwrite".into()].into_iter()).unwrap(),
             Cli::PalettesSync { overwrite: true }
         );
+    }
+
+    #[test]
+    fn cli_007_parses_standard_input_source_flags() {
+        let command = cli([
+            "agents".into(),
+            "--stdin".into(),
+            "--field".into(),
+            "title=details.name".into(),
+            "--field".into(),
+            "value=id".into(),
+        ]
+        .into_iter())
+        .unwrap();
+        assert_eq!(
+            command,
+            Cli::Run(RunOptions {
+                palette: "agents".into(),
+                stdin: Some(source::StdinSource {
+                    mode: source::StdinMode::Auto,
+                    fields: vec![
+                        source::FieldMapping {
+                            target: "title".into(),
+                            source: "details.name".into(),
+                        },
+                        source::FieldMapping {
+                            target: "value".into(),
+                            source: "id".into(),
+                        },
+                    ],
+                }),
+                source_cache: None,
+                default_stdin_palette: false,
+            })
+        );
+
+        assert!(cli(["--lines".into(), "path".into()].into_iter()).is_ok());
+        assert!(cli(["--jq".into(), ".[]".into()].into_iter()).is_ok());
+        assert!(cli(["--stdin".into(), "--jq".into(), ".".into()].into_iter()).is_err());
+        assert!(cli(["--field".into(), "name=id".into()].into_iter()).is_err());
+        assert!(cli(["--stdin".into(), "--field".into(), "broken".into()].into_iter()).is_err());
+        assert!(cli(["--lines".into(), "--stdin".into()].into_iter()).is_err());
+        assert!(cli(["--jq".into(), "--stdin".into()].into_iter()).is_err());
+    }
+
+    #[test]
+    fn cli_008_stdin_without_a_palette_uses_a_generic_finder() {
+        let command = cli(["--stdin".into()].into_iter()).unwrap();
+
+        let Cli::Run(options) = command else {
+            panic!("expected run command");
+        };
+        assert_eq!(options.palette, "default");
+        assert!(options.default_stdin_palette);
+        assert_eq!(options.stdin.unwrap().mode, source::StdinMode::Auto);
     }
 
     #[test]
