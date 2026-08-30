@@ -42,6 +42,16 @@ Vellum SHALL provide Ctrl-N and Ctrl-P list navigation by default in input and f
 - WHEN Ctrl-N or Ctrl-P is pressed in input or filter mode
 - THEN selection moves down or up within the list
 
+### Requirement: Browse by visible pages
+
+Vellum SHALL provide Ctrl-D and Ctrl-U page navigation by default in input and filter modes.
+
+#### Scenario: Page bindings move list selection by the viewport {#NAV-002}
+
+- GIVEN more visible items than fit in the list viewport
+- WHEN Ctrl-D or Ctrl-U is pressed in input or filter mode
+- THEN selection moves down or up by one viewport of items and remains within the list
+
 ### Requirement: Apply configured exact-match filters
 
 Vellum SHALL provide a dedicated filter mode whose configured choices narrow fuzzy-search candidates without changing input mode.

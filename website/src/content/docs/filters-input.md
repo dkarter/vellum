@@ -5,13 +5,15 @@ description: Configure fuzzy input, Vim editing, keybindings, and exact-match fi
 
 ## Input editing
 
-Readline-style bindings are enabled by default: Ctrl-N/Ctrl-P browse results, Ctrl-F/Ctrl-B move the cursor, Ctrl-A/Ctrl-E jump to either end, and Ctrl-W deletes the previous word. Every configurable binding accepts one key, a list of keys, or `false`.
+Readline-style bindings are enabled by default: Ctrl-N/Ctrl-P browse results, Ctrl-D/Ctrl-U move by a visible page, Ctrl-F/Ctrl-B move the cursor, Ctrl-A/Ctrl-E jump to either end, and Ctrl-W deletes the previous word. Every configurable binding accepts one key, a list of keys, or `false`.
 
 ```toml
 [keybindings]
 enabled = true
 down = ["down", "ctrl-n"]
 up = ["up", "ctrl-p"]
+page_down = "ctrl-d"
+page_up = "ctrl-u"
 accept = "enter"
 cancel = "esc"
 ```

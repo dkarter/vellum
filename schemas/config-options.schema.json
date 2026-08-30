@@ -64,6 +64,8 @@
         "enabled": { "type": "boolean", "default": true },
         "down": { "$ref": "#/$defs/bindings" },
         "up": { "$ref": "#/$defs/bindings" },
+        "page_down": { "$ref": "#/$defs/bindings", "default": "ctrl-d" },
+        "page_up": { "$ref": "#/$defs/bindings", "default": "ctrl-u" },
         "accept": { "$ref": "#/$defs/bindings" },
         "cancel": { "$ref": "#/$defs/bindings" },
         "forward": { "$ref": "#/$defs/bindings" },

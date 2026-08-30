@@ -224,6 +224,8 @@ pub struct Keybindings {
     pub enabled: bool,
     pub down: Bindings,
     pub up: Bindings,
+    pub page_down: Bindings,
+    pub page_up: Bindings,
     pub accept: Bindings,
     pub cancel: Bindings,
     pub forward: Bindings,
@@ -239,6 +241,8 @@ impl Default for Keybindings {
             enabled: true,
             down: Bindings::new(["down", "ctrl-n"]),
             up: Bindings::new(["up", "ctrl-p"]),
+            page_down: Bindings::new(["ctrl-d"]),
+            page_up: Bindings::new(["ctrl-u"]),
             accept: Bindings::new(["enter"]),
             cancel: Bindings::new(["esc"]),
             forward: Bindings::new(["ctrl-f"]),
@@ -627,6 +631,8 @@ impl Config {
                 && [
                     &self.keybindings.down,
                     &self.keybindings.up,
+                    &self.keybindings.page_down,
+                    &self.keybindings.page_up,
                     &self.keybindings.accept,
                     &self.keybindings.cancel,
                     &self.keybindings.forward,
@@ -751,7 +757,9 @@ impl Config {
         let navigation_conflicts = |bindings: &Bindings| {
             self.keybindings.enabled
                 && (bindings.overlaps(&self.keybindings.down)
-                    || bindings.overlaps(&self.keybindings.up))
+                    || bindings.overlaps(&self.keybindings.up)
+                    || bindings.overlaps(&self.keybindings.page_down)
+                    || bindings.overlaps(&self.keybindings.page_up))
         };
         let input_conflicts = self.search.enabled
             && self
@@ -926,6 +934,8 @@ mod tests {
         assert_eq!(config.search.title, "Vellum");
         assert_eq!(config.keybindings.accept.label(), "enter");
         assert_eq!(config.keybindings.down.0[1].label, "ctrl-n");
+        assert_eq!(config.keybindings.page_down.label(), "ctrl-d");
+        assert_eq!(config.keybindings.page_up.label(), "ctrl-u");
         assert_eq!(config.filters.mode.label(), "ctrl-g");
         assert_eq!(config.filters.clear.label(), "a");
         assert_eq!(config.filters.label, "filter");

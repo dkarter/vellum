@@ -66,6 +66,7 @@ pub struct App {
     pub action_cursor: usize,
     pub status: Option<String>,
     active_filter: Option<usize>,
+    list_page_size: usize,
     pub selected: usize,
     pub outcome: Outcome,
 }
@@ -152,6 +153,7 @@ impl App {
             action_cursor: 0,
             status: None,
             active_filter: None,
+            list_page_size: 1,
             selected: 0,
             outcome: Outcome::Running,
         };
@@ -206,6 +208,10 @@ impl App {
         if self.filter_mode {
             if key.code == KeyCode::Esc || self.filter_config.mode.matches(key) {
                 self.filter_mode = false;
+            } else if self.bindings_match(key, &self.keybindings.page_down) {
+                self.move_page_down();
+            } else if self.bindings_match(key, &self.keybindings.page_up) {
+                self.move_page_up();
             } else if self.bindings_match(key, &self.keybindings.down) {
                 self.move_down();
             } else if self.bindings_match(key, &self.keybindings.up) {
@@ -259,6 +265,10 @@ impl App {
             self.outcome = Outcome::Cancelled;
         } else if self.bindings_match(key, &self.keybindings.accept) {
             self.accept_selected();
+        } else if self.bindings_match(key, &self.keybindings.page_down) {
+            self.move_page_down();
+        } else if self.bindings_match(key, &self.keybindings.page_up) {
+            self.move_page_up();
         } else if self.bindings_match(key, &self.keybindings.down) {
             self.move_down();
         } else if self.bindings_match(key, &self.keybindings.up) {
@@ -484,6 +494,21 @@ impl App {
     pub fn active_filter(&self) -> Option<&FilterChoice> {
         self.active_filter
             .and_then(|index| self.filter_config.choices.get(index))
+    }
+
+    pub(crate) fn set_list_page_size(&mut self, page_size: usize) {
+        self.list_page_size = page_size.max(1);
+    }
+
+    fn move_page_down(&mut self) {
+        self.selected = self
+            .selected
+            .saturating_add(self.list_page_size)
+            .min(self.visible.len().saturating_sub(1));
+    }
+
+    fn move_page_up(&mut self) {
+        self.selected = self.selected.saturating_sub(self.list_page_size);
     }
 
     fn move_down(&mut self) {
@@ -1382,6 +1407,32 @@ mod tests {
         assert_eq!(app.selected, 1);
         app.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
         assert_eq!(app.selected, 0);
+    }
+
+    #[test]
+    fn nav_002_page_bindings_move_by_viewport_and_clamp_to_list() {
+        let mut app = app();
+        let source = (1..=10)
+            .map(|id| json!({ "id": id.to_string(), "name": format!("Item {id}") }))
+            .map(|item| item.as_object().unwrap().clone())
+            .collect();
+        app.replace_source(source, 0);
+        app.set_list_page_size(3);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
+        assert_eq!(app.selected, 3);
+
+        app.filter_mode = true;
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
+        assert_eq!(app.selected, 6);
+        app.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+        assert_eq!(app.selected, 3);
+
+        app.selected = 9;
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
+        assert_eq!(app.selected, 9);
+        app.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+        assert_eq!(app.selected, 6);
     }
 
     #[test]

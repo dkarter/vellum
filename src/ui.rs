@@ -80,6 +80,17 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
         .saturating_add(if config.item.border { 2 } else { 0 });
     let inner_width = list_area.width.saturating_sub(horizontal_chrome) as usize;
     let spacing = usize::from(config.item.spacing.min(list_area.height));
+    let item_height = app
+        .visible
+        .first()
+        .and_then(|index| app.items.get(*index))
+        .map(|item| item.rows.len())
+        .unwrap_or(1)
+        .max(1);
+    let page_size = (usize::from(list_area.height).saturating_add(spacing)
+        / item_height.saturating_add(spacing))
+    .max(1);
+    app.set_list_page_size(page_size);
     let capacity = if spacing == 0 {
         app.visible.len()
     } else {
