@@ -11,7 +11,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "Vellum",
-      description: "A customizable terminal multiplexer menu for live, searchable workflows.",
+      description: "A fast, customizable terminal command palette built in Rust for live, searchable workflows.",
       favicon: "/favicon.svg",
       customCss: ["./src/styles/starlight.css"],
       lastUpdated: true,
