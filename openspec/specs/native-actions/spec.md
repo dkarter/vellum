@@ -56,6 +56,13 @@ Vellum SHALL show a compact in-process menu of actions for the selected item, in
 - AND each configured icon is separated from its label by one space
 - AND action items use a one-cell horizontal gutter without an extra blank item row
 
+#### Scenario: Quick-action menu opens for a filtered selection {#ACT-012}
+
+- GIVEN an active exact-match filter with a visible selected item
+- WHEN the action menu binding is pressed while filter mode is open
+- THEN Vellum opens the actions for that filtered item
+- AND closing the action menu returns to filter mode
+
 ### Requirement: Resolve command-gated availability without blocking input
 
 Vellum SHALL resolve optional argv command availability probes outside the input and rendering paths, treat only a zero exit status as available, and cache equivalent probe results for the configured duration.

@@ -187,6 +187,22 @@ impl App {
             }
             return;
         }
+        if self.keybindings.enabled && self.action_config.menu.matches(key) {
+            if !self.has_potential_actions() {
+                return;
+            }
+            self.queue_availability_checks();
+            let available_actions = self.available_action_indices();
+            self.action_selected = self
+                .action_config
+                .default_index()
+                .and_then(|default| available_actions.iter().position(|index| *index == default))
+                .unwrap_or(0);
+            self.action_query.clear();
+            self.action_cursor = 0;
+            self.action_menu = true;
+            return;
+        }
         if self.filter_mode {
             if key.code == KeyCode::Esc || self.filter_config.mode.matches(key) {
                 self.filter_mode = false;
@@ -228,22 +244,6 @@ impl App {
         }
         if !self.filter_config.choices.is_empty() && self.filter_config.mode.matches(key) {
             self.filter_mode = true;
-            return;
-        }
-        if self.keybindings.enabled && self.action_config.menu.matches(key) {
-            if !self.has_potential_actions() {
-                return;
-            }
-            self.queue_availability_checks();
-            let available_actions = self.available_action_indices();
-            self.action_selected = self
-                .action_config
-                .default_index()
-                .and_then(|default| available_actions.iter().position(|index| *index == default))
-                .unwrap_or(0);
-            self.action_query.clear();
-            self.action_cursor = 0;
-            self.action_menu = true;
             return;
         }
         if key.code == KeyCode::Esc && self.input_config.vim {
@@ -959,6 +959,37 @@ mod tests {
         assert_eq!(app.action_selected, 0);
         app.handle_key(KeyEvent::from(KeyCode::Enter));
         assert_eq!(app.outcome, Outcome::ActionRequested(1));
+    }
+
+    #[test]
+    fn act_012_quick_action_menu_opens_for_a_filtered_selection() {
+        let mut app = app_with_actions();
+        app.source_items[0].insert("state".into(), "working".into());
+        app.source_items[1].insert("state".into(), "idle".into());
+        app.filter_config = toml::from_str(
+            r#"
+            mode = "ctrl-g"
+
+            [[choices]]
+            key = "i"
+            label = "idle"
+            source = "state"
+            value = "idle"
+            "#,
+        )
+        .unwrap();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::from(KeyCode::Char('i')));
+        assert_eq!(app.visible, [1]);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+
+        assert!(app.action_menu);
+        assert_eq!(app.selected_source_item().unwrap()["id"], "2");
+        app.handle_key(KeyEvent::from(KeyCode::Esc));
+        assert!(!app.action_menu);
+        assert!(app.filter_mode);
     }
 
     #[test]
