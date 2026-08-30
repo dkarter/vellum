@@ -24,17 +24,13 @@
 }
 
 .site-title img {
-  box-sizing: border-box;
-  width: 2rem;
-  height: 2.25rem;
+  width: 1.7rem;
+  height: 2rem;
   object-fit: contain;
 }
 
 :root[data-theme="light"] .site-title img {
-  padding: 0.18rem;
-  border-radius: 0.3rem;
-  background: #c95736;
-  box-shadow: 2px 2px 0 #17140f;
+  filter: drop-shadow(0 1px 1px rgb(23 20 15 / 0.5)) drop-shadow(0 3px 4px rgb(23 20 15 / 0.18));
 }
 
 code {
