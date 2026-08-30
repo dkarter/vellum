@@ -27,14 +27,14 @@
 
 ## Website and Documentation
 
-- [ ] Create an Astro and Starlight site under `website/`, following the structure used by hwt.
-- [ ] Build a custom landing page that explains Vellum's command palette, session switcher, agent picker, and file finder use cases.
-- [ ] Add an animated homepage visualization of fuzzy search, multiline items, live status refresh, filters, and native actions.
-- [ ] Make the visualization replayable, responsive, accessible, and respectful of reduced-motion preferences.
-- [ ] Move the user guide into searchable, version-aware documentation with installation, configuration, palette authoring, actions, source, and reference sections.
-- [ ] Add local website development and production-build mise tasks.
-- [ ] Build the website in CI and deploy it from `main` with GitHub Pages.
-- [ ] Add metadata, social preview artwork, canonical URLs, a favicon, and links between the README, landing page, documentation, and repository.
+- [x] Create an Astro and Starlight site under `website/`, following the structure used by hwt.
+- [x] Build a custom landing page that explains Vellum's command palette, session switcher, agent picker, and file finder use cases.
+- [x] Add an animated homepage visualization of fuzzy search, multiline items, live status refresh, filters, and native actions.
+- [x] Make the visualization replayable, responsive, accessible, and respectful of reduced-motion preferences.
+- [x] Move the user guide into searchable, version-aware documentation with installation, configuration, palette authoring, actions, source, and reference sections.
+- [x] Add local website development and production-build mise tasks.
+- [x] Build the website in CI and deploy it from `main` with GitHub Pages.
+- [x] Add metadata, social preview artwork, canonical URLs, a favicon, and links between the README, landing page, documentation, and repository.
 
 ## Sources
 

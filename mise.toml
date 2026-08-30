@@ -19,6 +19,14 @@ DO_NOT_TRACK = 1
 description = "Run the full Rust test suite"
 run = "cargo test"
 
+[tasks.website-dev]
+description = "Start the website development server"
+run = "aube --dir website run dev"
+
+[tasks.website-build]
+description = "Build the website and searchable documentation"
+run = "aube --dir website install --frozen-lockfile && aube --dir website run build"
+
 [tasks."openspec:check"]
 description = "Validate OpenSpec artifacts and spec/test links"
 run = """

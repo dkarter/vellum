@@ -1,0 +1,38 @@
+:root {
+  --sl-font: ui-sans-serif, system-ui, sans-serif;
+  --sl-font-mono: "SFMono-Regular", Consolas, monospace;
+  --sl-color-accent-low: #3d1e16;
+  --sl-color-accent: #ef8b68;
+  --sl-color-accent-high: #ffe2c9;
+  --sl-color-bg: #17140f;
+  --sl-color-bg-nav: #17140f;
+  --sl-color-bg-sidebar: #1d1913;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #f8d8c9;
+  --sl-color-accent: #ad3f22;
+  --sl-color-accent-high: #3f160d;
+  --sl-color-bg: #f7f1e5;
+  --sl-color-bg-nav: #f7f1e5;
+  --sl-color-bg-sidebar: #eee6d7;
+}
+
+.site-title {
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: -0.04em;
+}
+
+.site-title img {
+  width: 1.7rem;
+  height: 2rem;
+  object-fit: contain;
+}
+
+:root[data-theme="light"] .site-title img {
+  filter: drop-shadow(0 1px 1px rgb(23 20 15 / 0.5)) drop-shadow(0 3px 4px rgb(23 20 15 / 0.18));
+}
+
+code {
+  border-radius: 0.2rem;
+}
