@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/dkarter/vellum/compare/v0.7.0...v0.7.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* enable actions in filtered lists ([2fcfa6e](https://github.com/dkarter/vellum/commit/2fcfa6e1903deecbfc19cc896f8e46a6d8bdcee4))
+
 ## [0.7.0](https://github.com/dkarter/vellum/compare/v0.6.0...v0.7.0) (2026-08-29)
 
 
