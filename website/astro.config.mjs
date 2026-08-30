@@ -1,13 +1,11 @@
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 
-const site = "https://dkarter.github.io";
-const base = "/vellum";
-const socialImage = `${site}${base}/og-image.png`;
+const site = "https://vellum.doriankarter.com";
+const socialImage = `${site}/og-image.png`;
 
 export default defineConfig({
   site,
-  base,
   integrations: [
     starlight({
       title: "Vellum",

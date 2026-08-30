@@ -6,7 +6,7 @@
 
 Vellum is a fast, customizable menu for terminal multiplexers. Use it as a command palette, session switcher, agent picker, or fuzzy file finder, with rich multiline items and live data.
 
-**[Website](https://dkarter.github.io/vellum/)** · **[Documentation](https://dkarter.github.io/vellum/docs/)** · **[Quick start](https://dkarter.github.io/vellum/docs/quick-start/)**
+**[Website](https://vellum.doriankarter.com/)** · **[Documentation](https://vellum.doriankarter.com/docs/)** · **[Quick start](https://vellum.doriankarter.com/docs/quick-start/)**
 
 ## Install
 
@@ -30,7 +30,7 @@ pane_id="$(vellum herdr-agents)" && herdr agent focus "$pane_id"
 file="$(vellum files)" && "${EDITOR:-vi}" -- "$file"
 ```
 
-See the [documentation](https://dkarter.github.io/vellum/docs/) for installation, configuration, palette authoring, sources, templates, actions, filters, input, frecency, schemas, official palettes, and the CLI reference.
+See the [documentation](https://vellum.doriankarter.com/docs/) for installation, configuration, palette authoring, sources, templates, actions, filters, input, frecency, schemas, official palettes, and the CLI reference.
 
 ## Develop
 
