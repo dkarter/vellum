@@ -1,0 +1,43 @@
+---
+title: Vellum documentation
+description: Build live, searchable terminal menus from commands, files, and built-in sources.
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+Vellum is a fast, customizable menu for terminal multiplexers. Use the same small executable as a command palette, session switcher, agent picker, or fuzzy file finder.
+
+These docs describe **Vellum 0.8.x**. Use the version selector on GitHub to read documentation for an older release tag.
+
+<CardGrid>
+  <Card title="Start in five minutes" icon="rocket">
+    [Install Vellum](./installation/) and open one of its bundled palettes.
+  </Card>
+  <Card title="Author a palette" icon="pencil">
+    Turn JSON-producing commands or data files into a tailored terminal interface.
+  </Card>
+  <Card title="Compose with the shell" icon="seti:shell">
+    Accepted values go to stdout; the interface and diagnostics stay on stderr.
+  </Card>
+  <Card title="Stay current" icon="refresh">
+    Periodic refresh updates live state without discarding the current query or selection.
+  </Card>
+</CardGrid>
+
+## How Vellum fits
+
+Vellum does not replace your source tools. It reads structured records, renders the fields you care about, searches them, and either prints a selected value or runs a configured native action. Herdr is the first built-in integration, but sources, output, and actions are generic.
+
+```sh
+pane_id="$(vellum herdr-agents)" && herdr agent focus "$pane_id"
+file="$(vellum files)" && "${EDITOR:-vi}" -- "$file"
+```
+
+Cancellation and completed native actions produce no stdout. This makes Vellum safe in command substitutions and pipelines.
+
+## Next steps
+
+1. [Install Vellum](./installation/).
+2. Follow the [quick start](./quick-start/).
+3. Learn how [configuration layering](./configuration/) and [palette authoring](./palette-authoring/) work.
+4. Keep the [CLI reference](./cli-reference/) nearby.

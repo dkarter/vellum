@@ -1,0 +1,218 @@
+---
+import "../styles/site.css";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const docs = `${base}/docs/`;
+const install = `${base}/docs/installation/`;
+const canonical = new URL(`${base}/`, Astro.site);
+const socialImage = new URL(`${base}/og-image.png`, Astro.site);
+const useCases = [
+  ["01", "Command palette", "Turn structured data into a searchable layer over the tools you already use."],
+  ["02", "Session switcher", "See live multiplexer state, then focus a workspace without leaving the keyboard."],
+  ["03", "Agent selection", "Scan rich status, task, and repository context before choosing the right agent."],
+  ["04", "File finding", "Search paths with fd, frecency ranking, file icons, and clean stdout composition."],
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content="Vellum is a customizable terminal multiplexer menu for command palettes, sessions, agents, and files." />
+    <meta name="theme-color" content="#17140f" />
+    <meta property="og:title" content="Vellum: your terminal menu, made yours." />
+    <meta property="og:description" content="Shape live structured data into a fast, searchable terminal workflow." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={socialImage} />
+    <meta property="og:image:alt" content="Vellum terminal palette filtering live agent sessions" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content={socialImage} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href={`${base}/favicon.svg`} />
+    <title>Vellum: your terminal menu, made yours.</title>
+    <script is:inline>
+      const theme = localStorage.getItem("starlight-theme");
+      if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+    </script>
+  </head>
+  <body>
+    <header class="masthead shell">
+      <a class="wordmark" href={`${base}/`} aria-label="Vellum home"><i>V</i><strong>Vellum</strong></a>
+      <nav aria-label="Main navigation">
+        <a href={docs}>Documentation</a>
+        <a href="https://github.com/dkarter/vellum">GitHub</a>
+        <button type="button" class="theme-toggle" aria-label="Switch to dark theme" aria-pressed="false" title="Switch to dark theme">◐</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero shell">
+        <div class="hero-copy">
+          <p class="kicker">A terminal menu for live workflows</p>
+          <h1>Your tools.<br /><em>Your data.</em><br />One menu.</h1>
+          <p class="lede">Vellum turns commands, files, and built-in integrations into fast fuzzy palettes with rich items, exact filters, live refresh, and safe native actions.</p>
+          <div class="hero-actions">
+            <a class="primary" href={install}>Install Vellum <span>↗</span></a>
+            <a href={docs}>Read the docs</a>
+          </div>
+        </div>
+
+        <div class="demo-wrap" data-vellum-demo data-step="0">
+          <div class="demo-label"><span>LIVE PALETTE</span><span data-demo-stage>ready</span></div>
+          <div class="terminal" role="img" aria-label="Animated Vellum palette demonstrating fuzzy search, multiline results, status updates, exact filters, and native actions">
+            <div class="terminal-title"><span>vellum / herdr-agents</span><span>live 750ms</span></div>
+            <div class="search-line">
+              <span class="prompt">›</span><span class="query" aria-hidden="true"><i>d</i><i>o</i></span><span class="cursor"></span>
+              <span class="filter-badge">● working</span>
+            </div>
+            <div class="items" aria-hidden="true">
+              <div class="item item-docs selected">
+                <div><b><mark>d</mark><span>ocs-website</span></b><span class="state state-docs"><i></i><span class="before">blocked</span><span class="after">working</span></span></div>
+                <small>OpenCode · vellum</small>
+                <small>Implement documentation and landing page</small>
+              </div>
+              <div class="item item-core">
+                <div><b>core-runtime</b><span class="state"><i></i> working</span></div>
+                <small>Claude · vellum</small>
+                <small>Improve source cancellation</small>
+              </div>
+              <div class="item item-done">
+                <div><b>release-check</b><span class="state"><i></i> done</span></div>
+                <small>OpenCode · vellum</small>
+                <small>Verify 0.8.0 artifacts</small>
+              </div>
+            </div>
+            <div class="action-menu" aria-hidden="true">
+              <div class="action-head">Actions <span>docs-website</span></div>
+              <div class="action selected"><span>↗</span><b>Focus session</b><kbd>enter</kbd></div>
+              <div class="action"><span>◎</span><b>Open repository</b></div>
+              <div class="command">argv: ["herdr", "agent", "focus", "$pane_id"]</div>
+            </div>
+            <div class="terminal-foot"><span>INSERT</span><span class="foot-copy">ctrl-g filter · ctrl-a actions</span><span>1 / 3</span></div>
+          </div>
+          <div class="demo-controls">
+            <p class="sr-only" aria-live="polite" data-demo-live>Vellum palette ready.</p>
+            <button type="button" data-demo-replay>Replay demo <span>↻</span></button>
+            <ol aria-label="Demo sequence">
+              <li data-dot="1">fuzzy</li><li data-dot="2">refresh</li><li data-dot="3">filter</li><li data-dot="4">action</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section class="statement shell">
+        <p class="kicker">A thin layer, not a new world</p>
+        <h2>Keep your commands.<br />Make them <em>legible.</em></h2>
+        <p>Vellum reads structured data and gives it the interaction it deserves: a compact terminal interface that can show more than a label and stay current while you search.</p>
+      </section>
+
+      <section class="use-cases shell" aria-labelledby="use-cases-title">
+        <div class="section-intro">
+          <p class="kicker">Four shapes, one vocabulary</p>
+          <h2 id="use-cases-title">Compose it<br />around your work.</h2>
+        </div>
+        <div class="case-grid">
+          {useCases.map(([number, title, body]) => <article><span>{number}</span><h3>{title}</h3><p>{body}</p></article>)}
+        </div>
+      </section>
+
+      <section class="authoring shell">
+        <div>
+          <p class="kicker">Palettes are plain TOML</p>
+          <h2>Describe the view.<br /><em>Keep control.</em></h2>
+          <p>Choose a shell command, local file, or built-in source. Arrange source fields across multiline rows. Add conditions, dynamic colors, repeated segments, actions, and exact-match filters only where they help.</p>
+          <a href={`${base}/docs/palette-authoring/`}>Author a palette →</a>
+        </div>
+        <pre aria-label="Example Vellum palette"><code><span class="comment"># ~/.config/vellum/palettes/agents.toml</span>
+[source]
+builtin = <span class="string">"herdr-agents"</span>
+refresh_ms = <span class="number">750</span>
+
+[search]
+title = <span class="string">"Agents"</span>
+placeholder = <span class="string">"Find an agent..."</span>
+
+[item]
+value = <span class="string">"$pane_id"</span>
+template = [
+  [<span class="string">"$status_icon"</span>, <span class="string">"$agent"</span>, <span class="string">"$agent_status"</span>],
+  [<span class="string">"$terminal_title_stripped"</span>],
+  [<span class="string">"$workspace_label"</span>, <span class="string">"$cwd"</span>],
+]</code></pre>
+      </section>
+
+      <section class="closing shell">
+        <p class="kicker">Vellum 0.8</p>
+        <h2>Give your terminal<br />a better menu.</h2>
+        <div class="install-line"><code>mise use --global github:dkarter/vellum</code></div>
+        <a href={`${base}/docs/quick-start/`}>Build your first palette →</a>
+      </section>
+    </main>
+
+    <footer class="shell"><a class="wordmark" href={`${base}/`}><i>V</i><strong>Vellum</strong></a><span>Customizable terminal menus.</span><div><a href={docs}>Docs</a><a href="https://github.com/dkarter/vellum">GitHub</a><span>MIT</span></div></footer>
+
+    <script>
+      const root = document.documentElement;
+      const themeButton = document.querySelector<HTMLButtonElement>(".theme-toggle");
+      const currentTheme = () => root.dataset.theme ?? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+      const updateThemeButton = () => {
+        if (!themeButton) return;
+        const isDark = currentTheme() === "dark";
+        const label = `Switch to ${isDark ? "light" : "dark"} theme`;
+        themeButton.ariaPressed = String(isDark);
+        themeButton.ariaLabel = label;
+        themeButton.title = label;
+      };
+      updateThemeButton();
+      themeButton?.addEventListener("click", () => {
+        root.dataset.theme = currentTheme() === "light" ? "dark" : "light";
+        localStorage.setItem("starlight-theme", root.dataset.theme);
+        updateThemeButton();
+      });
+
+      const demo = document.querySelector<HTMLElement>("[data-vellum-demo]");
+      const replay = demo?.querySelector<HTMLButtonElement>("[data-demo-replay]");
+      const stage = demo?.querySelector<HTMLElement>("[data-demo-stage]");
+      const live = demo?.querySelector<HTMLElement>("[data-demo-live]");
+      const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+      const labels = ["ready", "fuzzy search", "live refresh", "exact filter", "native action", "complete"];
+      const announcements = [
+        "Vellum palette ready.",
+        "Fuzzy search entered: do. Docs website is selected.",
+        "Live source refresh changed docs website from blocked to working.",
+        "Exact status filter applied: working.",
+        "Native action menu opened for docs website.",
+        "Demo complete. Focus session action is ready.",
+      ];
+      let timers: number[] = [];
+
+      function showStep(step: number) {
+        if (!demo || !stage || !live) return;
+        demo.dataset.step = String(step);
+        stage.textContent = labels[step] ?? "complete";
+        live.textContent = announcements[step] ?? announcements[5];
+      }
+
+      function play() {
+        timers.forEach(clearTimeout);
+        timers = [];
+        showStep(reduceMotion.matches ? 5 : 0);
+        if (reduceMotion.matches) return;
+        [1, 2, 3, 4, 5].forEach((step) => timers.push(window.setTimeout(() => showStep(step), step * 1450)));
+      }
+
+      replay?.addEventListener("click", play);
+      reduceMotion.addEventListener("change", play);
+      if (demo) {
+        const observer = new IntersectionObserver(([entry]) => {
+          if (!entry?.isIntersecting) return;
+          observer.disconnect();
+          play();
+        }, { threshold: 0.25 });
+        observer.observe(demo);
+      }
+    </script>
+  </body>
+</html>
