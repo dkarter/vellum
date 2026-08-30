@@ -52,6 +52,12 @@ impl ActionsConfig {
             .as_ref()
             .and_then(|name| self.items.iter().position(|action| &action.name == name))
     }
+
+    pub fn has_refresh_action(&self) -> bool {
+        self.items
+            .iter()
+            .any(|action| action.on_success == OnSuccess::Refresh)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -206,6 +212,8 @@ pub struct SourceConfig {
     pub builtin: Option<BuiltinSource>,
     #[serde(default)]
     pub file: Option<PathBuf>,
+    #[serde(default, deserialize_with = "deserialize_true")]
+    pub stdin: bool,
     #[serde(default)]
     pub refresh_ms: u64,
 }
@@ -592,11 +600,18 @@ impl Config {
         }
         let source_kinds = usize::from(self.source.cmd.is_some())
             + usize::from(self.source.builtin.is_some())
-            + usize::from(self.source.file.is_some());
+            + usize::from(self.source.file.is_some())
+            + usize::from(self.source.stdin);
         match source_kinds {
             1 => {}
-            0 => bail!("source must set one of cmd, builtin, or file"),
-            _ => bail!("source must set only one of cmd, builtin, or file"),
+            0 => bail!("source must set one of cmd, builtin, file, or stdin"),
+            _ => bail!("source must set only one of cmd, builtin, file, or stdin"),
+        }
+        if self.source.stdin && self.source.refresh_ms != 0 {
+            bail!("source.stdin cannot be used with source.refresh_ms");
+        }
+        if self.source.stdin && self.actions.has_refresh_action() {
+            bail!("source.stdin cannot be used with action on_success = 'refresh'");
         }
         if self.item.template.is_empty() || self.item.template.iter().any(Vec::is_empty) {
             bail!("item.template must contain non-empty rows");
@@ -824,17 +839,19 @@ impl Config {
 }
 
 fn clear_overridden_source_variant(base: &mut toml::Value, overlay: &toml::Value) {
+    const SOURCE_KINDS: [&str; 4] = ["cmd", "builtin", "file", "stdin"];
+
     let Some(source) = overlay.get("source").and_then(toml::Value::as_table) else {
         return;
     };
     let Some(base_source) = base.get_mut("source").and_then(toml::Value::as_table_mut) else {
         return;
     };
-    if ["cmd", "builtin", "file"]
+    if SOURCE_KINDS
         .into_iter()
         .any(|kind| source.contains_key(kind))
     {
-        for kind in ["cmd", "builtin", "file"] {
+        for kind in SOURCE_KINDS {
             if !source.contains_key(kind) {
                 base_source.remove(kind);
             }
@@ -869,6 +886,19 @@ fn merge(base: &mut toml::Value, overlay: toml::Value) {
 
 const fn default_true() -> bool {
     true
+}
+
+fn deserialize_true<'de, D>(deserializer: D) -> std::result::Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    if bool::deserialize(deserializer)? {
+        Ok(true)
+    } else {
+        Err(serde::de::Error::custom(
+            "source.stdin must be true when set",
+        ))
+    }
 }
 
 const fn default_padding() -> u16 {
@@ -1115,6 +1145,49 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("source.file cannot be empty")
+        );
+    }
+
+    #[test]
+    fn src_017_stdin_is_a_non_refreshable_source_kind() {
+        let global = "[source]\ncmd = 'global command'";
+        let palette = MINIMAL.replace("cmd = \"herdr agents --json\"", "stdin = true");
+
+        let config = Config::parse_layered(Some(global), &palette).unwrap();
+
+        assert_eq!(config.source.cmd, None);
+        assert!(config.source.stdin);
+
+        let ambiguous = palette.replace("stdin = true", "stdin = true\nfile = 'items.json'");
+        assert!(
+            Config::parse(&ambiguous)
+                .unwrap_err()
+                .to_string()
+                .contains("only one")
+        );
+
+        let disabled = palette.replace("stdin = true", "stdin = false");
+        assert!(
+            format!("{:#}", Config::parse(&disabled).unwrap_err())
+                .contains("source.stdin must be true")
+        );
+
+        let periodic = palette.replace("stdin = true", "stdin = true\nrefresh_ms = 100");
+        assert!(
+            Config::parse(&periodic)
+                .unwrap_err()
+                .to_string()
+                .contains("source.refresh_ms")
+        );
+
+        let action_refresh = format!(
+            "{palette}\n[[actions.items]]\nname = 'reload'\nlabel = 'Reload'\ncommand = ['true']\non_success = 'refresh'"
+        );
+        assert!(
+            Config::parse(&action_refresh)
+                .unwrap_err()
+                .to_string()
+                .contains("on_success")
         );
     }
 

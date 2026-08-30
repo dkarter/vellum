@@ -1,9 +1,9 @@
 ---
 title: Sources
-description: Feed Vellum from shell commands, built-in adapters, or structured files.
+description: Feed Vellum from shell commands, built-in adapters, structured files, or standard input.
 ---
 
-Set exactly one of `source.cmd`, `source.builtin`, or `source.file` after global and palette settings merge.
+Set exactly one of `source.cmd`, `source.builtin`, `source.file`, or `source.stdin` after global and palette settings merge.
 
 ## Command sources
 
@@ -47,6 +47,38 @@ Relative paths resolve from the configuration file that declares `source.file`, 
 | `.jsonc` | JSON/NDJSON with `//`, `/* */`, or `#` comments |
 | `.yaml`, `.yml` | Top-level sequence of mappings |
 | `.toml` | One or more `[[items]]` tables |
+
+## Standard input
+
+Set `source.stdin = true` to use a JSON array or NDJSON stream piped to Vellum:
+
+```toml
+[source]
+stdin = true
+```
+
+```sh
+printf '%s\n' '{"id":"one","name":"First"}' | vellum custom.toml
+```
+
+Standard input is consumed once before the interface starts. It cannot be combined with `source.refresh_ms` or actions using `on_success = "refresh"`.
+
+CLI source options override the palette's configured source for one run:
+
+```sh
+# Plain lines need no palette or mapping.
+fd --type f | vellum --stdin
+
+# Copy dotted JSON fields to names expected by the palette.
+producer | vellum custom --stdin --field title=details.name --field value=id
+
+# Use the installed jq executable for arbitrary JSON transformations.
+producer | vellum custom --jq '.[] | {id, name}'
+```
+
+`--field TARGET=SOURCE` is repeatable and preserves the original fields. `SOURCE` may be a dotted object path. `--jq` runs `jq -c FILTER`, so `jq` must be available on `PATH`.
+
+Without an explicit palette, `--stdin` uses a minimal finder that displays and returns each plain line. Automatic `--stdin` input also accepts JSON arrays and NDJSON. Plain-line items expose the same text as `value`, `name`, and `path`, so they work with simple custom palettes too.
 
 ## Refresh
 

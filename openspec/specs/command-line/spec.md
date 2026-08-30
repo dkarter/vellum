@@ -61,3 +61,22 @@ Vellum SHALL expose safe and explicit-overwrite variants of the official palette
 - GIVEN `palettes sync` with or without `--overwrite`
 - WHEN CLI arguments are parsed
 - THEN Vellum selects safe synchronization or explicit overwrite respectively
+
+### Requirement: Override a palette source from standard input
+
+Vellum SHALL provide one-shot command-line source overrides for JSON or NDJSON,
+plain lines wrapped in a named field, and JSON transformed by an external `jq`
+filter. Simple `TARGET=SOURCE` field mappings SHALL be repeatable.
+
+#### Scenario: Standard-input source flags parse {#CLI-007}
+
+- GIVEN `--stdin`, `--lines FIELD`, or `--jq FILTER` and optional `--field TARGET=SOURCE` arguments
+- WHEN CLI arguments are parsed
+- THEN Vellum retains the palette and the requested one-shot source transformation
+- AND conflicting modes, malformed mappings, and mappings without a standard-input mode are rejected
+
+#### Scenario: Stdin without a palette uses a generic finder {#CLI-008}
+
+- GIVEN `vellum --stdin` without a palette argument
+- WHEN CLI arguments are parsed and plain lines are loaded
+- THEN Vellum uses an embedded palette that displays and returns each line

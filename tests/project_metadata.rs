@@ -40,7 +40,7 @@ fn meta_002_spec_runner_resolves_all_file_scenarios() {
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
-        "src_001\nsrc_002\nsrc_003\nsrc_004\nsrc_005\nsrc_006\nsrc_007\nsrc_008\nsrc_009\nsrc_010\nsrc_011\nsrc_012\nsrc_013\nsrc_014\nsrc_015\n"
+        "src_001\nsrc_002\nsrc_003\nsrc_004\nsrc_005\nsrc_006\nsrc_007\nsrc_008\nsrc_009\nsrc_010\nsrc_011\nsrc_012\nsrc_013\nsrc_014\nsrc_015\nsrc_016\nsrc_017\nsrc_018\nsrc_019\nsrc_020\n"
     );
 }
 
@@ -204,6 +204,29 @@ fn sch_008_shared_schema_describes_file_backed_sources() {
             .unwrap()
             .contains("configuration file that declares")
     );
+}
+
+#[test]
+fn sch_009_shared_schema_describes_standard_input_sources() {
+    let palette = read_json("schemas/vellum.schema.json");
+    let global = read_json("schemas/global.schema.json");
+    let shared = read_json("schemas/config-options.schema.json");
+    let stdin = &shared["properties"]["source"]["properties"]["stdin"];
+
+    assert!(
+        palette["description"]
+            .as_str()
+            .unwrap()
+            .contains("standard-input")
+    );
+    assert!(
+        global["description"]
+            .as_str()
+            .unwrap()
+            .contains("standard-input")
+    );
+    assert_eq!(stdin["const"], true);
+    assert!(stdin["description"].as_str().unwrap().contains("one-shot"));
 }
 
 #[test]

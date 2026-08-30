@@ -6,7 +6,7 @@ description: Vellum commands, path resolution, output behavior, and environment 
 ## Synopsis
 
 ```text
-vellum [PALETTE]
+vellum [PALETTE] [SOURCE OPTIONS]
 vellum palettes sync [--overwrite]
 vellum -h | --help
 vellum -V | --version
@@ -23,6 +23,19 @@ vellum ./examples/demo.toml
 ```
 
 The config root is `$XDG_CONFIG_HOME/vellum`, then `$HOME/.config/vellum`. Optional global defaults load from `<config-root>/config.toml`.
+
+### Source options
+
+| Option | Meaning |
+| --- | --- |
+| `--stdin` | Auto-detect plain lines, a JSON array, or NDJSON input |
+| `--lines FIELD` | Wrap each nonempty input line as an object containing `FIELD` |
+| `--field TARGET=SOURCE` | Copy a dotted JSON source field to a target field; repeatable |
+| `--jq FILTER` | Transform input through external `jq -c` before loading it |
+
+Use exactly one of `--stdin`, `--lines`, or `--jq`. `--field` requires one of those modes. CLI sources are one-shot: periodic refresh is disabled and actions using `on_success = "refresh"` are rejected.
+
+When no palette is given, `--stdin` uses a minimal finder that displays and returns each plain input line. For example, `fd --type f | vellum --stdin` requires no configuration.
 
 ## `vellum palettes sync`
 
