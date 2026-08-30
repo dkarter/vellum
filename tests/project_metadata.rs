@@ -3,6 +3,10 @@ use std::{fs, process::Command};
 use serde_json::Value;
 use vellum::{config::Config, item::render_item};
 
+fn read_json(path: &str) -> Value {
+    serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+}
+
 #[test]
 fn sch_001_bundled_schema_is_valid_json() {
     let schema: Value = serde_json::from_str(
@@ -36,7 +40,7 @@ fn meta_002_spec_runner_resolves_all_file_scenarios() {
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
-        "src_001\nsrc_002\nsrc_003\nsrc_004\nsrc_005\n"
+        "src_001\nsrc_002\nsrc_003\nsrc_004\nsrc_005\nsrc_006\nsrc_007\nsrc_008\nsrc_009\nsrc_010\nsrc_011\nsrc_012\nsrc_013\nsrc_014\nsrc_015\n"
     );
 }
 
@@ -55,13 +59,9 @@ fn sch_003_global_configuration_has_a_dedicated_schema() {
 
 #[test]
 fn sch_004_global_and_palette_schemas_share_option_definitions() {
-    let palette: Value =
-        serde_json::from_str(&fs::read_to_string("schemas/vellum.schema.json").unwrap()).unwrap();
-    let global: Value =
-        serde_json::from_str(&fs::read_to_string("schemas/global.schema.json").unwrap()).unwrap();
-    let shared: Value =
-        serde_json::from_str(&fs::read_to_string("schemas/config-options.schema.json").unwrap())
-            .unwrap();
+    let palette = read_json("schemas/vellum.schema.json");
+    let global = read_json("schemas/global.schema.json");
+    let shared = read_json("schemas/config-options.schema.json");
 
     assert_eq!(palette["$ref"], "./config-options.schema.json");
     assert_eq!(global["$ref"], palette["$ref"]);
@@ -174,6 +174,36 @@ fn sch_007_shared_schema_describes_repeated_template_segments() {
     ] {
         assert!(repeated["properties"][field].is_object(), "{field}");
     }
+}
+
+#[test]
+fn sch_008_shared_schema_describes_file_backed_sources() {
+    let palette = read_json("schemas/vellum.schema.json");
+    let global = read_json("schemas/global.schema.json");
+    let shared = read_json("schemas/config-options.schema.json");
+    let file = &shared["properties"]["source"]["properties"]["file"];
+
+    assert!(
+        palette["description"]
+            .as_str()
+            .unwrap()
+            .contains("file-backed")
+    );
+    assert!(
+        global["description"]
+            .as_str()
+            .unwrap()
+            .contains("file-backed")
+    );
+    assert_eq!(file["type"], "string");
+    assert_eq!(file["minLength"], 1);
+    assert_eq!(file["pattern"], r"\.(json|jsonc|yaml|yml|toml)$");
+    assert!(
+        file["description"]
+            .as_str()
+            .unwrap()
+            .contains("configuration file that declares")
+    );
 }
 
 #[test]

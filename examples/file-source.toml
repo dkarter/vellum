@@ -1,0 +1,12 @@
+#:schema ../schemas/vellum.schema.json
+
+[search]
+title = "Projects"
+placeholder = "Find a project..."
+
+[source]
+file = "file-source.json"
+
+[item]
+value = "$path"
+template = [[{ token = "$name", bold = true }], ["$path"]]

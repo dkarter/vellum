@@ -125,7 +125,7 @@ or newline-delimited JSON objects:
 {"id":"agent-2","name":"Claude"}
 ```
 
-Set `source.refresh_ms` to periodically rerun the command. `0`, the default,
+Set `source.refresh_ms` to periodically rerun the source. `0`, the default,
 disables refresh.
 
 Official palettes use maintained in-process adapters instead of shell pipelines:
@@ -136,7 +136,28 @@ builtin = "herdr-workspaces" # or "herdr-agents" or "files"
 refresh_ms = 1000
 ```
 
-Set exactly one of `source.cmd` or `source.builtin` in a complete palette.
+To load items without a shell command, use a file-backed source:
+
+```toml
+[source]
+file = "items.json"
+```
+
+Relative paths resolve from the palette or global configuration file that
+declares `source.file`, not from the process working directory. This remains
+true when a palette inherits its file source from the global configuration.
+Absolute paths are used unchanged. See `examples/file-source.toml`.
+
+The extension selects one of these collection shapes:
+
+- `.json`: a JSON array of objects or NDJSON objects, matching command output
+- `.jsonc`: the same JSON/NDJSON shapes with `//`, `/* */`, or `#` comments
+- `.yaml`/`.yml`: one top-level sequence whose entries are mappings
+- `.toml`: an `items` array of tables written as one or more `[[items]]` blocks
+
+Set exactly one of `source.cmd`, `source.builtin`, or `source.file` after global
+and palette settings merge. A source kind set in a palette replaces an inherited
+source kind while preserving unrelated settings such as `refresh_ms`.
 
 ## Configuration
 

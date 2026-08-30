@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use anyhow::{Context, Result, bail};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, Deserializer};
@@ -202,6 +204,8 @@ pub struct SourceConfig {
     pub cmd: Option<String>,
     #[serde(default)]
     pub builtin: Option<BuiltinSource>,
+    #[serde(default)]
+    pub file: Option<PathBuf>,
     #[serde(default)]
     pub refresh_ms: u64,
 }
@@ -523,19 +527,46 @@ impl Config {
     }
 
     pub fn parse_layered(global: Option<&str>, palette: &str) -> Result<Self> {
-        let mut value = match global {
-            Some(global) => {
-                toml::from_str(global).context("invalid global Vellum configuration")?
+        Self::parse_layered_at(global.map(|global| (global, None)), (palette, None))
+    }
+
+    pub fn parse_layered_files(
+        global: Option<(&str, &Path)>,
+        palette: (&str, &Path),
+    ) -> Result<Self> {
+        Self::parse_layered_at(
+            global.map(|(input, path)| (input, Some(path))),
+            (palette.0, Some(palette.1)),
+        )
+    }
+
+    fn parse_layered_at(
+        global: Option<(&str, Option<&Path>)>,
+        palette: (&str, Option<&Path>),
+    ) -> Result<Self> {
+        let (mut value, global_file_base) = match global {
+            Some((global, path)) => {
+                let value =
+                    toml::from_str(global).context("invalid global Vellum configuration")?;
+                let file_base = source_file_base(&value, path);
+                (value, file_base)
             }
-            None => toml::Value::Table(Default::default()),
+            None => (toml::Value::Table(Default::default()), None),
         };
-        let palette = toml::from_str(palette).context("invalid Vellum palette")?;
-        clear_overridden_source_variant(&mut value, &palette);
-        merge(&mut value, palette);
-        let config: Self = value
+        let palette_value = toml::from_str(palette.0).context("invalid Vellum palette")?;
+        let palette_file_base = source_file_base(&palette_value, palette.1);
+        clear_overridden_source_variant(&mut value, &palette_value);
+        merge(&mut value, palette_value);
+        let mut config: Self = value
             .try_into()
             .context("invalid merged Vellum configuration")?;
         config.validate()?;
+        if let Some(file) = &mut config.source.file
+            && file.is_relative()
+            && let Some(base) = palette_file_base.or(global_file_base)
+        {
+            *file = base.join(&*file);
+        }
         Ok(config)
     }
 
@@ -543,12 +574,29 @@ impl Config {
         if self.frecency.max_entries == 0 {
             bail!("frecency.max_entries must be greater than zero");
         }
-        match (&self.source.cmd, self.source.builtin) {
-            (Some(cmd), None) if !cmd.trim().is_empty() => {}
-            (None, Some(_)) => {}
-            (Some(_), None) => bail!("source.cmd cannot be empty"),
-            (Some(_), Some(_)) => bail!("source must set only one of cmd or builtin"),
-            (None, None) => bail!("source must set one of cmd or builtin"),
+        if self
+            .source
+            .cmd
+            .as_ref()
+            .is_some_and(|cmd| cmd.trim().is_empty())
+        {
+            bail!("source.cmd cannot be empty");
+        }
+        if self
+            .source
+            .file
+            .as_ref()
+            .is_some_and(|file| file.as_os_str().is_empty())
+        {
+            bail!("source.file cannot be empty");
+        }
+        let source_kinds = usize::from(self.source.cmd.is_some())
+            + usize::from(self.source.builtin.is_some())
+            + usize::from(self.source.file.is_some());
+        match source_kinds {
+            1 => {}
+            0 => bail!("source must set one of cmd, builtin, or file"),
+            _ => bail!("source must set only one of cmd, builtin, or file"),
         }
         if self.item.template.is_empty() || self.item.template.iter().any(Vec::is_empty) {
             bail!("item.template must contain non-empty rows");
@@ -782,12 +830,25 @@ fn clear_overridden_source_variant(base: &mut toml::Value, overlay: &toml::Value
     let Some(base_source) = base.get_mut("source").and_then(toml::Value::as_table_mut) else {
         return;
     };
-    if source.contains_key("builtin") {
-        base_source.remove("cmd");
+    if ["cmd", "builtin", "file"]
+        .into_iter()
+        .any(|kind| source.contains_key(kind))
+    {
+        for kind in ["cmd", "builtin", "file"] {
+            if !source.contains_key(kind) {
+                base_source.remove(kind);
+            }
+        }
     }
-    if source.contains_key("cmd") {
-        base_source.remove("builtin");
-    }
+}
+
+fn source_file_base(value: &toml::Value, config_path: Option<&Path>) -> Option<PathBuf> {
+    value
+        .get("source")?
+        .get("file")?
+        .as_str()
+        .and(config_path)
+        .map(|path| path.parent().unwrap_or_else(|| Path::new(".")).to_owned())
 }
 
 fn merge(base: &mut toml::Value, overlay: toml::Value) {
@@ -959,6 +1020,102 @@ mod tests {
 
         assert_eq!(config.source.cmd, None);
         assert_eq!(config.source.builtin, Some(BuiltinSource::Files));
+    }
+
+    #[test]
+    fn src_012_explicit_and_named_palette_paths_have_stable_bases() {
+        let palette = MINIMAL.replace("cmd = \"herdr agents --json\"", "file = 'data/items.json'");
+
+        let explicit = Config::parse_layered_files(
+            None,
+            (&palette, Path::new("project/palettes/custom.toml")),
+        )
+        .unwrap();
+        let named = Config::parse_layered_files(
+            None,
+            (
+                &palette,
+                Path::new("/home/me/.config/vellum/palettes/named.toml"),
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(
+            explicit.source.file.as_deref(),
+            Some(Path::new("project/palettes/data/items.json"))
+        );
+        assert_eq!(
+            named.source.file.as_deref(),
+            Some(Path::new(
+                "/home/me/.config/vellum/palettes/data/items.json"
+            ))
+        );
+
+        let absolute_palette = palette.replace("data/items.json", "/shared/items.json");
+        let absolute = Config::parse_layered_files(
+            None,
+            (&absolute_palette, Path::new("project/palettes/custom.toml")),
+        )
+        .unwrap();
+        assert_eq!(
+            absolute.source.file.as_deref(),
+            Some(Path::new("/shared/items.json"))
+        );
+    }
+
+    #[test]
+    fn src_013_inherited_global_file_paths_keep_the_global_base() {
+        let global = "[source]\nfile = 'data/items.yaml'\nrefresh_ms = 500";
+        let palette = r#"
+            [item]
+            template = [["$name"]]
+            value = "$id"
+        "#;
+
+        let config = Config::parse_layered_files(
+            Some((global, Path::new("/home/me/.config/vellum/config.toml"))),
+            (palette, Path::new("/work/palettes/custom.toml")),
+        )
+        .unwrap();
+
+        assert_eq!(
+            config.source.file.as_deref(),
+            Some(Path::new("/home/me/.config/vellum/data/items.yaml"))
+        );
+        assert_eq!(config.source.refresh_ms, 500);
+    }
+
+    #[test]
+    fn src_014_file_source_participates_in_source_kind_merging() {
+        let global = "[source]\ncmd = 'global command'\nrefresh_ms = 500";
+        let palette = MINIMAL.replace("cmd = \"herdr agents --json\"", "file = 'items.json'");
+
+        let config = Config::parse_layered(Some(global), &palette).unwrap();
+
+        assert_eq!(config.source.cmd, None);
+        assert_eq!(config.source.builtin, None);
+        assert_eq!(config.source.file.as_deref(), Some(Path::new("items.json")));
+        assert_eq!(config.source.refresh_ms, 500);
+
+        for extra in ["cmd = 'also a command'", "builtin = 'files'"] {
+            let ambiguous = palette.replace(
+                "file = 'items.json'",
+                &format!("file = 'items.json'\n{extra}"),
+            );
+            assert!(
+                Config::parse(&ambiguous)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("only one")
+            );
+        }
+        let empty = palette.replace("file = 'items.json'", "file = ''");
+        assert!(
+            Config::parse_layered_files(None, (&empty, Path::new("palette.toml")))
+                .unwrap_err()
+                .to_string()
+                .contains("source.file cannot be empty")
+        );
     }
 
     #[test]

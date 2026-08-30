@@ -20,13 +20,19 @@
       "additionalProperties": false,
       "properties": {
         "cmd": {
-          "description": "Shell command producing a JSON array or NDJSON objects. Mutually exclusive with builtin.",
+          "description": "Shell command producing a JSON array or NDJSON objects. Mutually exclusive with builtin and file.",
           "type": "string",
           "minLength": 1
         },
         "builtin": {
-          "description": "Maintained in-process source adapter. Mutually exclusive with cmd.",
+          "description": "Maintained in-process source adapter. Mutually exclusive with cmd and file.",
           "enum": ["herdr-workspaces", "herdr-agents", "files"]
+        },
+        "file": {
+          "description": "Path to a JSON, JSONC, YAML, or TOML item file. Relative paths resolve from the configuration file that declares them. Mutually exclusive with cmd and builtin.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\.(json|jsonc|yaml|yml|toml)$"
         },
         "refresh_ms": { "type": "integer", "minimum": 0, "default": 0 }
       }
