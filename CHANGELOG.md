@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/dkarter/vellum/compare/v0.9.0...v0.10.0) (2026-08-30)
+
+
+### Features
+
+* add page navigation bindings ([026f600](https://github.com/dkarter/vellum/commit/026f600b8b1bc6e0cfc274408745fb93f40bbf2c))
+
 ## [0.9.0](https://github.com/dkarter/vellum/compare/v0.8.0...v0.9.0) (2026-08-30)
 
 
