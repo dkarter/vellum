@@ -12,7 +12,8 @@ export default defineConfig({
     starlight({
       title: "Vellum",
       description: "A fast, customizable terminal command palette built in Rust for live, searchable workflows.",
-      favicon: "/favicon.svg",
+      favicon: "/favicon.png",
+      logo: { src: "./src/assets/logo.png", alt: "" },
       customCss: ["./src/styles/starlight.css"],
       lastUpdated: true,
       editLink: { baseUrl: "https://github.com/dkarter/vellum/edit/main/website/" },

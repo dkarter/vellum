@@ -1,5 +1,6 @@
 ---
 import "../styles/site.css";
+import logo from "../assets/logo.png";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const docs = `${base}/docs/`;
@@ -30,7 +31,7 @@ const useCases = [
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content={socialImage} />
     <link rel="canonical" href={canonical} />
-    <link rel="icon" href={`${base}/favicon.svg`} />
+    <link rel="icon" href={`${base}/favicon.png`} />
     <title>Vellum: The fast menu for your terminal.</title>
     <script is:inline>
       const theme = localStorage.getItem("starlight-theme");
@@ -39,7 +40,7 @@ const useCases = [
   </head>
   <body>
     <header class="masthead shell">
-      <a class="wordmark" href={`${base}/`} aria-label="Vellum home"><i>V</i><strong>Vellum</strong></a>
+      <a class="wordmark" href={`${base}/`} aria-label="Vellum home"><img src={logo.src} alt="" /><strong>Vellum</strong></a>
       <nav aria-label="Main navigation">
         <a href={docs}>Documentation</a>
         <a href="https://github.com/dkarter/vellum">GitHub</a>
@@ -151,7 +152,7 @@ template = [
       </section>
     </main>
 
-    <footer class="shell"><a class="wordmark" href={`${base}/`}><i>V</i><strong>Vellum</strong></a><span>Customizable terminal menus.</span><div><a href={docs}>Docs</a><a href="https://github.com/dkarter/vellum">GitHub</a><span>MIT</span></div></footer>
+    <footer class="shell"><a class="wordmark" href={`${base}/`} aria-label="Vellum home"><img src={logo.src} alt="" /><strong>Vellum</strong></a><span>Customizable terminal menus.</span><div><a href={docs}>Docs</a><a href="https://github.com/dkarter/vellum">GitHub</a><span>MIT</span></div></footer>
 
     <script>
       const root = document.documentElement;

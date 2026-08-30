@@ -23,6 +23,12 @@
   letter-spacing: -0.04em;
 }
 
+.site-title img {
+  width: 1.7rem;
+  height: 2rem;
+  object-fit: contain;
+}
+
 code {
   border-radius: 0.2rem;
 }

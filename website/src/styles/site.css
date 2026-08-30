@@ -31,7 +31,7 @@ button { color: inherit; }
 .shell { width: min(1180px, calc(100% - 48px)); margin-inline: auto; }
 .masthead { height: 78px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
 .wordmark { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; }
-.wordmark i { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--ink); font-family: Georgia, serif; font-size: 20px; font-style: normal; }
+.wordmark img { display: block; width: 29px; height: 35px; object-fit: contain; }
 .wordmark strong { font-family: Georgia, "Times New Roman", serif; font-size: 1.25rem; letter-spacing: -0.04em; }
 .masthead nav { display: flex; align-items: center; gap: 28px; font-size: 0.8rem; font-weight: 700; }
 .masthead nav a { text-decoration: none; }

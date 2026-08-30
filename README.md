@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="160" src="https://github.com/user-attachments/assets/90c255f3-d30b-4121-9cb8-a527b078ed49" alt="Vellum logo" />
+  <img width="140" src="website/src/assets/logo.png" alt="Vellum logo" />
   <br />
   <strong><em>Vellum</em></strong>
 </p>
