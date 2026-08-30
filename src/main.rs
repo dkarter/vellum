@@ -56,8 +56,9 @@ fn main() -> Result<()> {
     let palette_key = palette_identity(&palette_path);
     let palette = fs::read_to_string(&palette_path)
         .with_context(|| format!("failed to read palette {}", palette_path.display()))?;
-    let global = match config_root.map(|root| root.join("config.toml")) {
-        Some(global_path) => match fs::read_to_string(&global_path) {
+    let global_path = config_root.map(|root| root.join("config.toml"));
+    let global = match &global_path {
+        Some(global_path) => match fs::read_to_string(global_path) {
             Ok(global) => Some(global),
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
             Err(error) => {
@@ -67,7 +68,8 @@ fn main() -> Result<()> {
         },
         None => None,
     };
-    let config = Config::parse_layered(global.as_deref(), &palette)?;
+    let global = global.as_deref().zip(global_path.as_deref());
+    let config = Config::parse_layered_files(global, (&palette, &palette_path))?;
     let source_items = source::run(&config.source)?;
     let mut frecency = if config.frecency.enabled {
         let root = data_root().context(

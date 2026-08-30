@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Vellum configuration",
-  "description": "An individual Vellum palette.",
+  "description": "An individual Vellum palette supporting command, built-in, or file-backed sources.",
   "$ref": "./config-options.schema.json"
 }

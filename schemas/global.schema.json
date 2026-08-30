@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Vellum global configuration",
-  "description": "Global Vellum defaults merged beneath individual palettes.",
+  "description": "Global Vellum defaults, including command, built-in, or file-backed sources, merged beneath individual palettes.",
   "$ref": "./config-options.schema.json"
 }

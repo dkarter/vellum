@@ -56,3 +56,10 @@ Vellum SHALL configure Taplo to use the bundled schema for example TOML files.
 - GIVEN the shared configuration option schema
 - WHEN its item template segment definitions are inspected
 - THEN it describes array iteration, element tokens, separators, uniqueness, styling, searchability, and alignment
+
+#### Scenario: Shared schema describes file-backed sources {#SCH-008}
+
+- GIVEN the global and palette schema entry points and their shared option definitions
+- WHEN their source fields are inspected
+- THEN both schemas document `source.file` alongside command and built-in sources
+- AND the file field describes supported data file extensions and declaration-relative paths
