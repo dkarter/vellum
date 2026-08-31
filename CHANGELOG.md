@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/dkarter/vellum/compare/v0.10.0...v0.10.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* prevent cursor animation during redraw ([3297a34](https://github.com/dkarter/vellum/commit/3297a34f431ead37f590a85c0b44da2f1302f347))
+
 ## [0.10.0](https://github.com/dkarter/vellum/compare/v0.9.0...v0.10.0) (2026-08-30)
 
 
