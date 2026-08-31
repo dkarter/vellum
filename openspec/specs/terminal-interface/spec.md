@@ -67,6 +67,13 @@ Vellum SHALL horizontally viewport long queries and use a mode-specific terminal
 - WHEN Vellum applies terminal cursor style
 - THEN insert uses a steady bar and normal uses a steady block
 
+#### Scenario: Repainting does not expose cursor movement {#UI-013}
+
+- GIVEN the search cursor is visible
+- WHEN Vellum repaints changed list cells
+- THEN the cursor is hidden while the terminal drawing cursor moves
+- AND it is positioned in the search input before becoming visible again
+
 ### Requirement: Show Vim mode in the footer
 
 Vellum SHALL show the active Vim mode as a colored badge at the left of the footer only when Vim input is enabled.

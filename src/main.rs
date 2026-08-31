@@ -247,7 +247,7 @@ fn run(terminal: &mut Tui, app: &mut App, config: &Config) -> Result<Outcome> {
     let mut cursor_mode = None;
     loop {
         if dirty {
-            terminal.draw(|frame| ui::render(frame, app, config))?;
+            ui::redraw(terminal, app, config)?;
             let desired_cursor = if app.action_menu {
                 vellum::config::InputMode::Insert
             } else {
@@ -718,7 +718,95 @@ fn print_sync_report(report: &official::SyncReport) {
 
 #[cfg(test)]
 mod tests {
+    use ratatui::{
+        backend::{Backend, ClearType, TestBackend, WindowSize},
+        buffer::Cell,
+        layout::{Position, Size},
+    };
+
     use super::*;
+
+    #[derive(Debug, PartialEq)]
+    enum CursorEvent {
+        Draw,
+        Hide,
+        Position(Position),
+        Show,
+    }
+
+    struct RecordingBackend {
+        inner: TestBackend,
+        events: Vec<CursorEvent>,
+    }
+
+    impl RecordingBackend {
+        fn new(width: u16, height: u16) -> Self {
+            Self {
+                inner: TestBackend::new(width, height),
+                events: Vec::new(),
+            }
+        }
+    }
+
+    impl Backend for RecordingBackend {
+        type Error = std::convert::Infallible;
+
+        fn draw<'a, I>(&mut self, content: I) -> std::result::Result<(), std::convert::Infallible>
+        where
+            I: Iterator<Item = (u16, u16, &'a Cell)>,
+        {
+            self.events.push(CursorEvent::Draw);
+            self.inner.draw(content)
+        }
+
+        fn hide_cursor(&mut self) -> std::result::Result<(), std::convert::Infallible> {
+            self.events.push(CursorEvent::Hide);
+            self.inner.hide_cursor()
+        }
+
+        fn show_cursor(&mut self) -> std::result::Result<(), std::convert::Infallible> {
+            self.events.push(CursorEvent::Show);
+            self.inner.show_cursor()
+        }
+
+        fn get_cursor_position(
+            &mut self,
+        ) -> std::result::Result<Position, std::convert::Infallible> {
+            self.inner.get_cursor_position()
+        }
+
+        fn set_cursor_position<P: Into<Position>>(
+            &mut self,
+            position: P,
+        ) -> std::result::Result<(), std::convert::Infallible> {
+            let position = position.into();
+            self.events.push(CursorEvent::Position(position));
+            self.inner.set_cursor_position(position)
+        }
+
+        fn clear(&mut self) -> std::result::Result<(), std::convert::Infallible> {
+            self.inner.clear()
+        }
+
+        fn clear_region(
+            &mut self,
+            clear_type: ClearType,
+        ) -> std::result::Result<(), std::convert::Infallible> {
+            self.inner.clear_region(clear_type)
+        }
+
+        fn size(&self) -> std::result::Result<Size, std::convert::Infallible> {
+            self.inner.size()
+        }
+
+        fn window_size(&mut self) -> std::result::Result<WindowSize, std::convert::Infallible> {
+            self.inner.window_size()
+        }
+
+        fn flush(&mut self) -> std::result::Result<(), std::convert::Infallible> {
+            self.inner.flush()
+        }
+    }
 
     #[test]
     fn act_011_availability_checks_run_on_a_background_worker() {
@@ -798,6 +886,37 @@ mod tests {
         assert_eq!(
             cursor_style(vellum::config::InputMode::Normal),
             SetCursorStyle::SteadyBlock
+        );
+    }
+
+    #[test]
+    fn ui_013_repainting_does_not_expose_cursor_movement() {
+        let config = Config::parse(
+            "[source]\ncmd = 'unused'\n[item]\ntemplate = [['$name']]\nvalue = '$id'",
+        )
+        .unwrap();
+        let mut app = App::new(
+            Vec::new(),
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            true,
+        );
+        let backend = RecordingBackend::new(50, 9);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        ui::redraw(&mut terminal, &mut app, &config).unwrap();
+
+        assert_eq!(
+            terminal.backend().events,
+            [
+                CursorEvent::Hide,
+                CursorEvent::Draw,
+                CursorEvent::Hide,
+                CursorEvent::Position(Position::new(1, 1)),
+                CursorEvent::Show,
+            ]
         );
     }
 

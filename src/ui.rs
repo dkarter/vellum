@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
 use ratatui::{
-    Frame,
+    Frame, Terminal,
+    backend::Backend,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -16,7 +17,40 @@ use crate::{
 };
 
 pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
+    if let Some(position) = render_with_cursor_position(frame, app, config) {
+        frame.set_cursor_position(position);
+    }
+}
+
+/// Redraws the UI without exposing Ratatui's terminal drawing cursor.
+///
+/// Ratatui moves the terminal cursor through changed cells while painting. Positioning
+/// the hidden cursor before showing it prevents cursor-motion shaders from animating
+/// those implementation-detail movements.
+pub fn redraw<B: Backend>(
+    terminal: &mut Terminal<B>,
+    app: &mut App,
+    config: &Config,
+) -> Result<(), B::Error> {
+    terminal.hide_cursor()?;
+    let mut cursor_position = None;
+    terminal.draw(|frame| {
+        cursor_position = render_with_cursor_position(frame, app, config);
+    })?;
+    if let Some(position) = cursor_position {
+        terminal.set_cursor_position(position)?;
+        terminal.show_cursor()?;
+    }
+    Ok(())
+}
+
+fn render_with_cursor_position(
+    frame: &mut Frame,
+    app: &mut App,
+    config: &Config,
+) -> Option<(u16, u16)> {
     let theme = &config.theme;
+    let mut cursor_position = None;
     let area = frame.area();
     let background = Block::new().style(Style::new().bg(color(&theme.background)));
     frame.render_widget(background, area);
@@ -70,7 +104,7 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
                 .title(title),
         );
         frame.render_widget(input, search_area);
-        frame.set_cursor_position((search_area.x + 1 + cursor_offset, search_area.y + 1));
+        cursor_position = Some((search_area.x + 1 + cursor_offset, search_area.y + 1));
     }
 
     let horizontal_chrome = config
@@ -218,12 +252,15 @@ pub fn render(frame: &mut Frame, app: &mut App, config: &Config) {
     ));
     frame.render_widget(Paragraph::new(Line::from(footer)), footer_area);
 
-    if app.action_menu {
-        render_action_menu(frame, app, config);
+    if app.action_menu
+        && let Some(position) = render_action_menu(frame, app, config)
+    {
+        cursor_position = Some(position);
     }
+    cursor_position
 }
 
-fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) {
+fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) -> Option<(u16, u16)> {
     let area = frame.area();
     let matching = app.matching_action_indices();
     let content_width = matching
@@ -271,7 +308,7 @@ fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) {
     frame.render_widget(Clear, popup);
     frame.render_widget(outer, popup);
     if inner.width < 4 || inner.height < 3 {
-        return;
+        return None;
     }
 
     let (query, cursor_offset) = if app.action_query.is_empty() {
@@ -293,7 +330,7 @@ fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) {
             ),
         search_area,
     );
-    frame.set_cursor_position((search_area.x + 2 + cursor_offset, search_area.y));
+    let cursor_position = (search_area.x + 2 + cursor_offset, search_area.y);
 
     let items = matching
         .iter()
@@ -335,7 +372,7 @@ fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) {
             .block(Block::new().padding(Padding::horizontal(1))),
             list_area,
         );
-        return;
+        return Some(cursor_position);
     }
     let list = List::new(items)
         .block(Block::new().padding(Padding::horizontal(1)))
@@ -346,6 +383,7 @@ fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) {
         );
     let mut state = ListState::default().with_selected(Some(app.action_selected));
     frame.render_stateful_widget(list, list_area, &mut state);
+    Some(cursor_position)
 }
 
 fn centered(area: Rect, width: u16, height: u16) -> Rect {
