@@ -11,7 +11,7 @@ rust-version = "1.88"
 anyhow = "1.0"
 crossterm = "0.29"
 json_comments = "0.2.2"
-noyalib = "0.0.28"
+noyalib = "0.0.33"
 nucleo-matcher = "0.3"
 ratatui = "0.30"
 rusqlite = { version = "0.40", features = ["bundled"] }
