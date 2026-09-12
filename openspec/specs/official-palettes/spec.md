@@ -105,6 +105,13 @@ Vellum SHALL bundle an `fd`-backed file finder with colorful Nerd Font filetype 
 - WHEN a file item is rendered
 - THEN its icon, parent path, and bold filename appear on one line with compact spacing
 
+#### Scenario: File palette includes hidden files {#PAL-017}
+
+- GIVEN the bundled file finder palette
+- WHEN its `fd` source command is built
+- THEN hidden files are included while standard ignore rules remain enabled
+- AND Git's internal metadata directory is excluded
+
 ### Requirement: Keep bundled palettes compatible
 
 Vellum SHALL validate bundled palettes against its configuration and built-in source contracts.

@@ -44,10 +44,7 @@ fn run_herdr_agents() -> Result<Vec<SourceItem>> {
 }
 
 fn run_files() -> Result<Vec<SourceItem>> {
-    let output = Command::new("fd")
-        .args(["--type", "f", "--color", "never", "--print0"])
-        .output()
-        .context("failed to run fd")?;
+    let output = file_command().output().context("failed to run fd")?;
     ensure_success("fd", &output)?;
     output
         .stdout
@@ -58,6 +55,21 @@ fn run_files() -> Result<Vec<SourceItem>> {
             file_item(Path::new(path))
         })
         .collect()
+}
+
+fn file_command() -> Command {
+    let mut command = Command::new("fd");
+    command.args([
+        "--type",
+        "f",
+        "--hidden",
+        "--exclude",
+        ".git",
+        "--color",
+        "never",
+        "--print0",
+    ]);
+    command
 }
 
 pub fn herdr_workspaces(input: &str) -> Result<Vec<SourceItem>> {
@@ -535,5 +547,21 @@ mod tests {
         let unknown = file_item(Path::new("odd name.unknown")).unwrap();
         assert_eq!(unknown["icon"], "󰈔");
         assert_eq!(unknown["path"], json!("odd name.unknown"));
+    }
+
+    #[test]
+    fn pal_017_file_command_includes_hidden_files() {
+        let command = file_command();
+        let arguments: Vec<_> = command.get_args().collect();
+
+        assert!(arguments.contains(&std::ffi::OsStr::new("--hidden")));
+        assert!(!arguments.contains(&std::ffi::OsStr::new("--no-ignore")));
+        assert!(arguments.windows(2).any(|arguments| {
+            arguments
+                == [
+                    std::ffi::OsStr::new("--exclude"),
+                    std::ffi::OsStr::new(".git"),
+                ]
+        }));
     }
 }
