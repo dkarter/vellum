@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/dkarter/vellum/compare/v0.10.1...v0.11.0) (2026-09-12)
+
+
+### Features
+
+* include hidden files in file palette ([9336848](https://github.com/dkarter/vellum/commit/9336848762cc0188514ed8aab9a8ddf2725250bd))
+
 ## [0.10.1](https://github.com/dkarter/vellum/compare/v0.10.0...v0.10.1) (2026-08-31)
 
 
