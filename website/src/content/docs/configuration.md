@@ -5,6 +5,28 @@ description: Understand palette files, global defaults, layering, and themes.
 
 Vellum reads TOML configuration. A palette defines the data and presentation for one menu. Optional global defaults live at `$XDG_CONFIG_HOME/vellum/config.toml`, falling back to `~/.config/vellum/config.toml`.
 
+## Working directory
+
+Set top-level `cwd` to run palette sources and actions from a specific directory. It accepts a literal path or an exact environment variable reference using `$NAME` or `${NAME}`:
+
+```toml
+cwd = "$HERDR_ACTIVE_PANE_CWD"
+```
+
+Vellum changes directory after loading the palette and before running its source. Source commands, built-in sources, availability probes, and actions inherit that directory. An action or availability probe with its own `cwd` overrides it.
+
+For a Herdr popup, pass the focused pane directory through the documented `HERDR_ACTIVE_PANE_CWD` environment variable and use the configuration above. A tmux popup can export its pane path directly:
+
+```text
+display-popup -E -e VELLUM_PANE_CWD='#{pane_current_path}' 'vellum hwt-urls --select-1'
+```
+
+```toml
+cwd = "$VELLUM_PANE_CWD"
+```
+
+Unset environment references and paths that cannot be entered produce an error before the source runs. Relative literal paths resolve from the directory where Vellum was launched.
+
 ## Layering
 
 Vellum recursively merges the selected palette over global defaults. A palette can override one setting without copying an entire section. Source kinds are special: setting `cmd`, `builtin`, or `file` in a palette replaces an inherited source kind while preserving unrelated source settings such as `refresh_ms`.

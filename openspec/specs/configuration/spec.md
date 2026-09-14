@@ -103,3 +103,26 @@ Vellum SHALL allow global defaults and individual palettes to configure filter-m
 - GIVEN a global filter-mode binding and palette filter choices
 - WHEN Vellum parses the layered configuration
 - THEN the filter label and bindings and each choice's key, label, source field, value, icon, and color are retained
+
+### Requirement: Configure the palette working directory
+
+Vellum SHALL allow a palette to select the working directory inherited by its
+sources and actions using either a literal path or an environment variable.
+
+#### Scenario: Sources and actions inherit the palette working directory {#CFG-012}
+
+- GIVEN a palette whose working directory references a set environment variable
+- WHEN Vellum runs its source and an action without an action-level working directory
+- THEN both commands execute in the configured palette working directory
+
+#### Scenario: Action working directories override the palette directory {#CFG-013}
+
+- GIVEN a palette and action that configure different working directories
+- WHEN Vellum runs the action
+- THEN the action executes in its own configured working directory
+
+#### Scenario: Invalid palette working directories fail clearly {#CFG-014}
+
+- GIVEN a palette with an empty path, unset environment variable, or inaccessible working directory
+- WHEN Vellum validates or starts the palette
+- THEN it exits before running the source and identifies the invalid working directory
