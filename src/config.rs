@@ -11,6 +11,8 @@ use crate::builtins::BuiltinSource;
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default)]
+    pub cwd: Option<String>,
+    #[serde(default)]
     pub search: SearchConfig,
     pub source: SourceConfig,
     #[serde(default)]
@@ -583,6 +585,9 @@ impl Config {
     }
 
     fn validate(&self) -> Result<()> {
+        if self.cwd.as_ref().is_some_and(|cwd| cwd.trim().is_empty()) {
+            bail!("cwd cannot be empty");
+        }
         if self.frecency.max_entries == 0 {
             bail!("frecency.max_entries must be greater than zero");
         }

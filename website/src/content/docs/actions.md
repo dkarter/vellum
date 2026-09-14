@@ -36,6 +36,8 @@ cwd = "$checkout_path"
 command = ["gh", "pr", "view", "--web"]
 ```
 
+Without an action-level `cwd`, the action inherits the palette's top-level [`cwd`](../configuration/#working-directory).
+
 ## Conditions and availability
 
 Every `when` condition must match. Use `equals` for an exact scalar or `is_set = true` for a present, non-null field.
