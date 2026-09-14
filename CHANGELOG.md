@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/dkarter/vellum/compare/v0.11.0...v0.12.0) (2026-09-14)
+
+
+### Features
+
+* auto-select sole palette result ([ae98e72](https://github.com/dkarter/vellum/commit/ae98e729692b6c694dcd371844cccbe149997fd5))
+
 ## [0.11.0](https://github.com/dkarter/vellum/compare/v0.10.1...v0.11.0) (2026-09-12)
 
 
