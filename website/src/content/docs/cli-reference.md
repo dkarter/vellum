@@ -19,6 +19,7 @@ Open an interactive palette. With no argument, `PALETTE` is `default`. A single 
 ```sh
 vellum
 vellum herdr-agents
+vellum herdr-agents --select-1
 vellum ./examples/demo.toml
 ```
 
@@ -36,6 +37,14 @@ The config root is `$XDG_CONFIG_HOME/vellum`, then `$HOME/.config/vellum`. Optio
 Use exactly one of `--stdin`, `--lines`, or `--jq`. `--field` requires one of those modes. CLI sources are one-shot: periodic refresh is disabled and actions using `on_success = "refresh"` are rejected.
 
 When no palette is given, `--stdin` uses a minimal finder that displays and returns each plain input line. For example, `fd --type f | vellum --stdin` requires no configuration.
+
+### Selection options
+
+| Option | Meaning |
+| --- | --- |
+| `-1`, `--select-1` | Accept the initial result without opening the menu when exactly one item exists |
+
+With zero or multiple initial items, `--select-1` opens the interactive palette normally. A sole item follows the usual accept behavior, including its configured `item.value` or default action.
 
 ## `vellum palettes sync`
 

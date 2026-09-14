@@ -358,6 +358,13 @@ impl App {
             .and_then(|&index| self.source_items.get(index))
     }
 
+    pub fn accept_if_only(&mut self) {
+        if self.visible.len() != 1 {
+            return;
+        }
+        self.accept_selected();
+    }
+
     pub fn finish_action(&mut self, error: Option<String>) {
         self.outcome = Outcome::Running;
         self.status = error;
@@ -930,6 +937,22 @@ mod tests {
         assert_eq!(app.visible, [1]);
         app.handle_key(KeyEvent::from(KeyCode::Enter));
         assert_eq!(app.outcome, Outcome::Accepted("2".into()));
+    }
+
+    #[test]
+    fn sea_003_accepts_only_a_sole_initial_item() {
+        let mut sole = app();
+        sole.replace_source(vec![sole.source_items[0].clone()], 0);
+        let mut multiple = app();
+        let mut empty = app();
+        empty.replace_source(Vec::new(), 0);
+
+        sole.accept_if_only();
+        assert_eq!(sole.outcome, Outcome::Accepted("1".into()));
+        multiple.accept_if_only();
+        assert_eq!(multiple.outcome, Outcome::Running);
+        empty.accept_if_only();
+        assert_eq!(empty.outcome, Outcome::Running);
     }
 
     #[test]

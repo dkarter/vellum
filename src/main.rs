@@ -103,18 +103,26 @@ fn main() -> Result<()> {
     } else {
         None
     };
-    if let Some(stdin) = &stdin_source {
+    let stdin_items = if let Some(stdin) = &stdin_source {
         if config.actions.has_refresh_action() {
             bail!("stdin CLI sources cannot be used with action on_success = 'refresh'");
         }
         let items = source::run_stdin(stdin)?;
-        return rerun_with_terminal_input(
-            &run_request.palette,
-            run_request.default_stdin_palette,
-            &items,
-        );
-    }
-    let source_items = if let Some(cache) = &run_request.source_cache {
+        if !run_request.select_1 || items.len() != 1 {
+            return rerun_with_terminal_input(
+                &run_request.palette,
+                run_request.default_stdin_palette,
+                run_request.select_1,
+                &items,
+            );
+        }
+        Some(items)
+    } else {
+        None
+    };
+    let source_items = if let Some(items) = stdin_items {
+        items
+    } else if let Some(cache) = &run_request.source_cache {
         if config.actions.has_refresh_action() {
             bail!("stdin CLI sources cannot be used with action on_success = 'refresh'");
         }
@@ -159,11 +167,26 @@ fn main() -> Result<()> {
         frecency_scores,
         config.actions.clone(),
     );
+    if run_request.select_1 {
+        app.accept_if_only();
+    }
 
-    let mut terminal = TerminalSession::init().context("failed to initialize terminal")?;
-    let result = run(&mut terminal.terminal, &mut app, &config);
-    terminal.restore()?;
-    let outcome = result?;
+    let immediate_outcome = match app.outcome {
+        Outcome::Accepted(_) => Some(app.outcome.clone()),
+        Outcome::ActionRequested(_) => match execute_requested_action(&mut app, &config, 0)? {
+            ActionExecution::Exit => Some(Outcome::ActionCompleted),
+            ActionExecution::Refreshed | ActionExecution::Failed => None,
+        },
+        _ => None,
+    };
+    let outcome = if let Some(outcome) = immediate_outcome {
+        outcome
+    } else {
+        let mut terminal = TerminalSession::init().context("failed to initialize terminal")?;
+        let result = run(&mut terminal.terminal, &mut app, &config);
+        terminal.restore()?;
+        result?
+    };
     if let Outcome::Accepted(value) = &outcome
         && let Err(error) = record_selection(frecency.as_mut(), &palette_key, value)
     {
@@ -281,28 +304,14 @@ fn run(terminal: &mut Tui, app: &mut App, config: &Config) -> Result<Outcome> {
             }
         }
 
-        if let Outcome::ActionRequested(index) = app.outcome {
+        if matches!(app.outcome, Outcome::ActionRequested(_)) {
             dirty = true;
             refresh_result = None;
             availability_results.clear();
-            app.invalidate_availability();
-            let action = &config.actions.items[index];
-            let item = app
-                .selected_source_item()
-                .context("selected action has no source item")?;
-            match action::run(action, item) {
-                Ok(()) if action.on_success == OnSuccess::Exit => {
-                    return Ok(Outcome::ActionCompleted);
-                }
-                Ok(()) => match source::run(&config.source) {
-                    Ok(items) => {
-                        app.replace_source(items, started.elapsed().as_millis() as u64);
-                        app.finish_action(None);
-                        last_refresh = Instant::now();
-                    }
-                    Err(error) => app.finish_action(Some(format!("refresh failed: {error:#}"))),
-                },
-                Err(error) => app.finish_action(Some(format!("action failed: {error:#}"))),
+            match execute_requested_action(app, config, started.elapsed().as_millis() as u64)? {
+                ActionExecution::Exit => return Ok(Outcome::ActionCompleted),
+                ActionExecution::Refreshed => last_refresh = Instant::now(),
+                ActionExecution::Failed => {}
             }
         }
 
@@ -339,6 +348,50 @@ fn run(terminal: &mut Tui, app: &mut App, config: &Config) -> Result<Outcome> {
         {
             refresh_result = Some(spawn_refresh(config.source.clone()));
             last_refresh = Instant::now();
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ActionExecution {
+    Exit,
+    Refreshed,
+    Failed,
+}
+
+fn execute_requested_action(
+    app: &mut App,
+    config: &Config,
+    elapsed_ms: u64,
+) -> Result<ActionExecution> {
+    let Outcome::ActionRequested(index) = app.outcome else {
+        bail!("no action was requested");
+    };
+    app.invalidate_availability();
+    let action = config
+        .actions
+        .items
+        .get(index)
+        .context("requested action does not exist")?;
+    let item = app
+        .selected_source_item()
+        .context("selected action has no source item")?;
+    match action::run(action, item) {
+        Ok(()) if action.on_success == OnSuccess::Exit => Ok(ActionExecution::Exit),
+        Ok(()) => match source::run(&config.source) {
+            Ok(items) => {
+                app.replace_source(items, elapsed_ms);
+                app.finish_action(None);
+                Ok(ActionExecution::Refreshed)
+            }
+            Err(error) => {
+                app.finish_action(Some(format!("refresh failed: {error:#}")));
+                Ok(ActionExecution::Failed)
+            }
+        },
+        Err(error) => {
+            app.finish_action(Some(format!("action failed: {error:#}")));
+            Ok(ActionExecution::Failed)
         }
     }
 }
@@ -455,6 +508,7 @@ struct RunOptions {
     stdin: Option<source::StdinSource>,
     source_cache: Option<PathBuf>,
     default_stdin_palette: bool,
+    select_1: bool,
 }
 
 fn cli(args: impl Iterator<Item = String>) -> Result<Cli> {
@@ -479,6 +533,7 @@ fn parse_run_options(args: &[String]) -> Result<RunOptions> {
     let mut fields = Vec::new();
     let mut source_cache = None;
     let mut default_stdin_palette = false;
+    let mut select_1 = false;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -525,6 +580,7 @@ fn parse_run_options(args: &[String]) -> Result<RunOptions> {
                 }
             }
             "--stdin-default-palette" => default_stdin_palette = true,
+            "-1" | "--select-1" => select_1 = true,
             argument if argument.starts_with('-') => {
                 bail!("unknown option '{argument}'; run 'vellum --help' for usage")
             }
@@ -546,6 +602,7 @@ fn parse_run_options(args: &[String]) -> Result<RunOptions> {
         stdin: mode.map(|mode| source::StdinSource { mode, fields }),
         source_cache,
         default_stdin_palette,
+        select_1,
     })
 }
 
@@ -567,6 +624,7 @@ impl Drop for SourceCache {
 fn rerun_with_terminal_input(
     palette: &str,
     default_stdin_palette: bool,
+    select_1: bool,
     items: &[source::SourceItem],
 ) -> Result<()> {
     let cache = write_source_cache(items)?;
@@ -579,6 +637,9 @@ fn rerun_with_terminal_input(
     command.arg("--stdin-cache").arg(&cache.0);
     if default_stdin_palette {
         command.arg("--stdin-default-palette");
+    }
+    if select_1 {
+        command.arg("--select-1");
     }
     let status = command
         .stdin(Stdio::from(terminal_input))
@@ -699,7 +760,7 @@ fn palette_identity(path: &std::path::Path) -> String {
 
 fn print_help() {
     println!(
-        "Vellum {}\n\nUsage:\n  vellum [PALETTE] [SOURCE OPTIONS]\n  vellum palettes sync [--overwrite]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nCommands:\n  palettes sync  Install bundled palettes without replacing existing files\n\nSource options:\n  --stdin                 Auto-detect plain lines, JSON, or NDJSON from standard input\n  --lines FIELD           Wrap each nonempty input line as {{FIELD: line}}\n  --field TARGET=SOURCE   Copy a dotted source field to a target field (repeatable)\n  --jq FILTER             Transform standard-input JSON through jq\n\nOptions:\n  --overwrite    Replace existing official palette files during sync\n  -h, --help     Print help\n  -V, --version  Print version",
+        "Vellum {}\n\nUsage:\n  vellum [PALETTE] [SOURCE OPTIONS]\n  vellum palettes sync [--overwrite]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nCommands:\n  palettes sync  Install bundled palettes without replacing existing files\n\nSource options:\n  --stdin                 Auto-detect plain lines, JSON, or NDJSON from standard input\n  --lines FIELD           Wrap each nonempty input line as {{FIELD: line}}\n  --field TARGET=SOURCE   Copy a dotted source field to a target field (repeatable)\n  --jq FILTER             Transform standard-input JSON through jq\n\nOptions:\n  -1, --select-1  Accept the initial result without opening the menu when exactly one exists\n  --overwrite     Replace existing official palette files during sync\n  -h, --help      Print help\n  -V, --version   Print version",
         env!("CARGO_PKG_VERSION")
     );
 }
@@ -835,6 +896,7 @@ mod tests {
                 stdin: None,
                 source_cache: None,
                 default_stdin_palette: false,
+                select_1: false,
             })
         );
     }
@@ -873,6 +935,7 @@ mod tests {
                 stdin: None,
                 source_cache: None,
                 default_stdin_palette: false,
+                select_1: false,
             })
         );
     }
@@ -982,6 +1045,7 @@ mod tests {
                 }),
                 source_cache: None,
                 default_stdin_palette: false,
+                select_1: false,
             })
         );
 
@@ -1004,6 +1068,68 @@ mod tests {
         assert_eq!(options.palette, "default");
         assert!(options.default_stdin_palette);
         assert_eq!(options.stdin.unwrap().mode, source::StdinMode::Auto);
+    }
+
+    #[test]
+    fn cli_009_select_one_argument_parses() {
+        let named = cli(["links".into(), "--select-1".into()].into_iter()).unwrap();
+        let stdin = cli(["--stdin".into(), "-1".into()].into_iter()).unwrap();
+
+        let Cli::Run(named) = named else {
+            panic!("expected run command");
+        };
+        let Cli::Run(stdin) = stdin else {
+            panic!("expected run command");
+        };
+        assert!(named.select_1);
+        assert!(stdin.select_1);
+        assert!(stdin.default_stdin_palette);
+    }
+
+    #[test]
+    fn sea_003_sole_item_default_action_executes_without_interaction() {
+        let config = Config::parse(
+            r#"
+                [source]
+                cmd = "printf '[{\"id\":\"only\"}]'"
+
+                [actions]
+                default = "open"
+
+                [[actions.items]]
+                name = "open"
+                label = "Open"
+                command = ["true"]
+
+                [item]
+                value = "$id"
+                template = [["$id"]]
+            "#,
+        )
+        .unwrap();
+        let mut app = App::new_with_frecency_and_actions(
+            vec![
+                serde_json::json!({ "id": "only" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ],
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            config.search.enabled,
+            Default::default(),
+            config.actions.clone(),
+        );
+
+        app.accept_if_only();
+
+        assert_eq!(app.outcome, Outcome::ActionRequested(0));
+        assert_eq!(
+            execute_requested_action(&mut app, &config, 0).unwrap(),
+            ActionExecution::Exit
+        );
     }
 
     #[test]

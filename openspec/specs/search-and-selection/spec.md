@@ -22,6 +22,13 @@ Vellum SHALL rank matching items while excluding items that do not fuzzy-match t
 - WHEN the user filters to an item and accepts it
 - THEN Vellum returns that item's configured value
 
+#### Scenario: A sole initial item can be accepted automatically {#SEA-003}
+
+- GIVEN select-one behavior is requested for an initial source containing exactly one item
+- WHEN the application initializes
+- THEN that item's configured value is accepted without user input
+- AND zero or multiple initial items remain interactive
+
 ### Requirement: Preserve stable selection across refreshes
 
 Vellum SHALL preserve selection by configured output value when refreshed items reorder.

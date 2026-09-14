@@ -80,3 +80,13 @@ filter. Simple `TARGET=SOURCE` field mappings SHALL be repeatable.
 - GIVEN `vellum --stdin` without a palette argument
 - WHEN CLI arguments are parsed and plain lines are loaded
 - THEN Vellum uses an embedded palette that displays and returns each line
+
+### Requirement: Select an unambiguous result without opening the menu
+
+Vellum SHALL provide opt-in `-1` and `--select-1` arguments that accept the initial result when exactly one item is available.
+
+#### Scenario: Select-one argument parses {#CLI-009}
+
+- GIVEN `--select-1` or `-1` with a named palette or standard-input source
+- WHEN CLI arguments are parsed
+- THEN Vellum retains the select-one request for that palette invocation
