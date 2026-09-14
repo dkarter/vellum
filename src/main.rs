@@ -72,13 +72,19 @@ fn main() -> Result<()> {
     } else {
         palette_path(&run_request.palette, config_root.as_deref())?
     };
-    let palette_key = palette_identity(&palette_path);
     let palette = if run_request.default_stdin_palette {
         STDIN_PALETTE.to_owned()
     } else {
         fs::read_to_string(&palette_path)
             .with_context(|| format!("failed to read palette {}", palette_path.display()))?
     };
+    let palette_path = if run_request.default_stdin_palette {
+        palette_path
+    } else {
+        fs::canonicalize(&palette_path)
+            .with_context(|| format!("failed to resolve palette {}", palette_path.display()))?
+    };
+    let palette_key = palette_identity(&palette_path);
     let global_path = config_root.map(|root| root.join("config.toml"));
     let global = match &global_path {
         Some(global_path) => match fs::read_to_string(global_path) {
@@ -91,8 +97,16 @@ fn main() -> Result<()> {
         },
         None => None,
     };
+    let global_path = match (global.as_ref(), global_path) {
+        (Some(_), Some(path)) => Some(
+            fs::canonicalize(&path)
+                .with_context(|| format!("failed to resolve {}", path.display()))?,
+        ),
+        _ => None,
+    };
     let global = global.as_deref().zip(global_path.as_deref());
     let mut config = Config::parse_layered_files(global, (&palette, &palette_path))?;
+    set_working_directory(config.cwd.as_deref())?;
     let stdin_source = if run_request.source_cache.is_none() {
         run_request.stdin.clone().or_else(|| {
             config.source.stdin.then(|| source::StdinSource {
@@ -110,7 +124,7 @@ fn main() -> Result<()> {
         let items = source::run_stdin(stdin)?;
         if !run_request.select_1 || items.len() != 1 {
             return rerun_with_terminal_input(
-                &run_request.palette,
+                &palette_path,
                 run_request.default_stdin_palette,
                 run_request.select_1,
                 &items,
@@ -622,7 +636,7 @@ impl Drop for SourceCache {
 }
 
 fn rerun_with_terminal_input(
-    palette: &str,
+    palette: &std::path::Path,
     default_stdin_palette: bool,
     select_1: bool,
     items: &[source::SourceItem],
@@ -736,6 +750,33 @@ fn data_root_from(
             home.filter(|root| root.is_absolute() && !root.as_os_str().is_empty())
                 .map(|root| root.join(".local/share/vellum"))
         })
+}
+
+fn set_working_directory(configured: Option<&str>) -> Result<()> {
+    let Some(configured) = configured else {
+        return Ok(());
+    };
+    let path = if configured.starts_with('$') {
+        let variable = configured
+            .strip_prefix("${")
+            .and_then(|value| value.strip_suffix('}'))
+            .unwrap_or_else(|| &configured[1..]);
+        let valid = !variable.is_empty()
+            && !variable.starts_with(|character: char| character.is_ascii_digit())
+            && variable
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || character == '_');
+        if !valid {
+            bail!("invalid configured cwd environment variable reference '{configured}'");
+        }
+        PathBuf::from(env::var_os(variable).with_context(|| {
+            format!("configured cwd environment variable '{variable}' is not set")
+        })?)
+    } else {
+        PathBuf::from(configured)
+    };
+    env::set_current_dir(&path)
+        .with_context(|| format!("failed to change to configured cwd {}", path.display()))
 }
 
 fn palette_path(palette: &str, config_root: Option<&std::path::Path>) -> Result<PathBuf> {
