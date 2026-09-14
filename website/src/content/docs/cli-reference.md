@@ -46,6 +46,22 @@ When no palette is given, `--stdin` uses a minimal finder that displays and retu
 
 With zero or multiple initial items, `--select-1` opens the interactive palette normally. A sole item follows the usual accept behavior, including its configured `item.value` or default action.
 
+### Working directory
+
+`--cwd PATH` changes Vellum's process directory before loading the source. Source commands, availability probes, and actions inherit this directory. An action or availability probe with its own configured `cwd` continues to override the process directory. Vellum exits with an error if `PATH` cannot be resolved or entered.
+
+For a [Herdr](https://github.com/dkarter/herdr) popup, pass the focused pane directory directly and fall back to the launch directory when the environment variable is unset:
+
+```toml
+command = "vellum hwt-urls --select-1 --cwd \"${HERDR_ACTIVE_PANE_CWD:-$PWD}\""
+```
+
+For tmux, interpolate the active pane path into the popup command:
+
+```sh
+bind-key u display-popup -E "vellum hwt-urls --select-1 --cwd '#{pane_current_path}'"
+```
+
 ## `vellum palettes sync`
 
 Copy official palettes into `<config-root>/palettes`. Existing paths are reported and skipped.
