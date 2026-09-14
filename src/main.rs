@@ -79,6 +79,13 @@ fn main() -> Result<()> {
         fs::read_to_string(&palette_path)
             .with_context(|| format!("failed to read palette {}", palette_path.display()))?
     };
+    let rerun_palette_path = if palette_path.is_absolute() {
+        palette_path.clone()
+    } else {
+        env::current_dir()
+            .context("failed to resolve the palette path for terminal input")?
+            .join(&palette_path)
+    };
     let global_path = config_root.map(|root| root.join("config.toml"));
     let global = match &global_path {
         Some(global_path) => match fs::read_to_string(global_path) {
@@ -93,6 +100,9 @@ fn main() -> Result<()> {
     };
     let global = global.as_deref().zip(global_path.as_deref());
     let mut config = Config::parse_layered_files(global, (&palette, &palette_path))?;
+    if let Some(cwd) = &run_request.cwd {
+        set_working_directory(cwd)?;
+    }
     let stdin_source = if run_request.source_cache.is_none() {
         run_request.stdin.clone().or_else(|| {
             config.source.stdin.then(|| source::StdinSource {
@@ -110,7 +120,7 @@ fn main() -> Result<()> {
         let items = source::run_stdin(stdin)?;
         if !run_request.select_1 || items.len() != 1 {
             return rerun_with_terminal_input(
-                &run_request.palette,
+                &rerun_palette_path,
                 run_request.default_stdin_palette,
                 run_request.select_1,
                 &items,
@@ -509,6 +519,7 @@ struct RunOptions {
     source_cache: Option<PathBuf>,
     default_stdin_palette: bool,
     select_1: bool,
+    cwd: Option<PathBuf>,
 }
 
 fn cli(args: impl Iterator<Item = String>) -> Result<Cli> {
@@ -534,6 +545,7 @@ fn parse_run_options(args: &[String]) -> Result<RunOptions> {
     let mut source_cache = None;
     let mut default_stdin_palette = false;
     let mut select_1 = false;
+    let mut cwd = None;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -581,6 +593,13 @@ fn parse_run_options(args: &[String]) -> Result<RunOptions> {
             }
             "--stdin-default-palette" => default_stdin_palette = true,
             "-1" | "--select-1" => select_1 = true,
+            "--cwd" => {
+                index += 1;
+                let path = required_flag_value(args, index, "--cwd")?;
+                if cwd.replace(PathBuf::from(path)).is_some() {
+                    bail!("--cwd may only be set once");
+                }
+            }
             argument if argument.starts_with('-') => {
                 bail!("unknown option '{argument}'; run 'vellum --help' for usage")
             }
@@ -603,7 +622,15 @@ fn parse_run_options(args: &[String]) -> Result<RunOptions> {
         source_cache,
         default_stdin_palette,
         select_1,
+        cwd,
     })
+}
+
+fn set_working_directory(path: &std::path::Path) -> Result<()> {
+    let resolved = fs::canonicalize(path)
+        .with_context(|| format!("failed to resolve working directory {}", path.display()))?;
+    env::set_current_dir(&resolved)
+        .with_context(|| format!("failed to use working directory {}", resolved.display()))
 }
 
 fn required_flag_value<'a>(args: &'a [String], index: usize, flag: &str) -> Result<&'a str> {
@@ -622,7 +649,7 @@ impl Drop for SourceCache {
 }
 
 fn rerun_with_terminal_input(
-    palette: &str,
+    palette_path: &std::path::Path,
     default_stdin_palette: bool,
     select_1: bool,
     items: &[source::SourceItem],
@@ -632,7 +659,7 @@ fn rerun_with_terminal_input(
     let mut command =
         Command::new(env::current_exe().context("failed to locate Vellum executable")?);
     if !default_stdin_palette {
-        command.arg(palette);
+        command.arg(palette_path);
     }
     command.arg("--stdin-cache").arg(&cache.0);
     if default_stdin_palette {
@@ -760,7 +787,7 @@ fn palette_identity(path: &std::path::Path) -> String {
 
 fn print_help() {
     println!(
-        "Vellum {}\n\nUsage:\n  vellum [PALETTE] [SOURCE OPTIONS]\n  vellum palettes sync [--overwrite]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nCommands:\n  palettes sync  Install bundled palettes without replacing existing files\n\nSource options:\n  --stdin                 Auto-detect plain lines, JSON, or NDJSON from standard input\n  --lines FIELD           Wrap each nonempty input line as {{FIELD: line}}\n  --field TARGET=SOURCE   Copy a dotted source field to a target field (repeatable)\n  --jq FILTER             Transform standard-input JSON through jq\n\nOptions:\n  -1, --select-1  Accept the initial result without opening the menu when exactly one exists\n  --overwrite     Replace existing official palette files during sync\n  -h, --help      Print help\n  -V, --version   Print version",
+        "Vellum {}\n\nUsage:\n  vellum [PALETTE] [SOURCE OPTIONS]\n  vellum palettes sync [--overwrite]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nCommands:\n  palettes sync  Install bundled palettes without replacing existing files\n\nSource options:\n  --stdin                 Auto-detect plain lines, JSON, or NDJSON from standard input\n  --lines FIELD           Wrap each nonempty input line as {{FIELD: line}}\n  --field TARGET=SOURCE   Copy a dotted source field to a target field (repeatable)\n  --jq FILTER             Transform standard-input JSON through jq\n\nOptions:\n  --cwd PATH      Set the process working directory before loading the source\n  -1, --select-1  Accept the initial result without opening the menu when exactly one exists\n  --overwrite     Replace existing official palette files during sync\n  -h, --help      Print help\n  -V, --version   Print version",
         env!("CARGO_PKG_VERSION")
     );
 }
@@ -897,6 +924,7 @@ mod tests {
                 source_cache: None,
                 default_stdin_palette: false,
                 select_1: false,
+                cwd: None,
             })
         );
     }
@@ -936,6 +964,7 @@ mod tests {
                 source_cache: None,
                 default_stdin_palette: false,
                 select_1: false,
+                cwd: None,
             })
         );
     }
@@ -1046,6 +1075,7 @@ mod tests {
                 source_cache: None,
                 default_stdin_palette: false,
                 select_1: false,
+                cwd: None,
             })
         );
 
@@ -1084,6 +1114,35 @@ mod tests {
         assert!(named.select_1);
         assert!(stdin.select_1);
         assert!(stdin.default_stdin_palette);
+    }
+
+    #[test]
+    fn cli_010_working_directory_argument_parses() {
+        let command = cli([
+            "links".into(),
+            "--select-1".into(),
+            "--cwd".into(),
+            "/tmp/checkout".into(),
+        ]
+        .into_iter())
+        .unwrap();
+
+        let Cli::Run(options) = command else {
+            panic!("expected run command");
+        };
+        assert_eq!(options.cwd, Some(PathBuf::from("/tmp/checkout")));
+        assert!(options.select_1);
+        assert!(cli(["--cwd".into()].into_iter()).is_err());
+        assert!(
+            cli([
+                "--cwd".into(),
+                "/tmp/one".into(),
+                "--cwd".into(),
+                "/tmp/two".into()
+            ]
+            .into_iter())
+            .is_err()
+        );
     }
 
     #[test]

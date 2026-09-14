@@ -90,3 +90,23 @@ Vellum SHALL provide opt-in `-1` and `--select-1` arguments that accept the init
 - GIVEN `--select-1` or `-1` with a named palette or standard-input source
 - WHEN CLI arguments are parsed
 - THEN Vellum retains the select-one request for that palette invocation
+
+### Requirement: Select the process working directory
+
+Vellum SHALL accept a `--cwd PATH` option, resolve and enter that directory
+before loading the palette source, and report a clear error when the directory
+cannot be used. Source commands and actions without their own `cwd` SHALL
+inherit the selected directory, while an action-level `cwd` SHALL override it.
+
+#### Scenario: Process working directory controls sources and actions {#CLI-010}
+
+- GIVEN a palette whose source and action depend on relative paths
+- WHEN Vellum runs the palette with `--cwd PATH`
+- THEN the source and an action without `cwd` run in `PATH`
+- AND an action-level `cwd` overrides `PATH`
+
+#### Scenario: Invalid process working directory fails clearly {#CLI-011}
+
+- GIVEN a missing or non-directory path
+- WHEN Vellum runs a palette with that path as `--cwd`
+- THEN Vellum exits before running the source and identifies the working-directory error
