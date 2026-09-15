@@ -19,15 +19,15 @@ mise use --global github:dkarter/vellum
 Then install the bundled Herdr and file-finding palettes:
 
 ```sh
-vellum palettes sync
-vellum files
+vlm palettes sync
+vlm files
 ```
 
 Vellum writes accepted values to stdout and keeps its interface and diagnostics on stderr, so it composes cleanly with other terminal tools:
 
 ```sh
-pane_id="$(vellum herdr-agents)" && herdr agent focus "$pane_id"
-file="$(vellum files)" && "${EDITOR:-vi}" -- "$file"
+pane_id="$(vlm herdr-agents)" && herdr agent focus "$pane_id"
+file="$(vlm files)" && "${EDITOR:-vi}" -- "$file"
 ```
 
 See the [documentation](https://vellum.doriankarter.com/docs/) for installation, configuration, palette authoring, sources, templates, actions, filters, input, frecency, schemas, official palettes, and the CLI reference.

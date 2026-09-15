@@ -3,7 +3,7 @@ title: Official palettes
 description: Use Vellum's bundled Herdr and file-finding palettes.
 ---
 
-Install the bundled palettes with `vellum palettes sync`. Existing files remain untouched; `--overwrite` deliberately replaces them. Vellum refuses to overwrite symlink targets.
+Install the bundled palettes with `vlm palettes sync`. Existing files remain untouched; `--overwrite` deliberately replaces them. Vellum refuses to overwrite symlink targets.
 
 | Palette | Dependencies | Enter behavior |
 | --- | --- | --- |

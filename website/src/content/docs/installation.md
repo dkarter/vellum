@@ -14,7 +14,7 @@ mise use --global github:dkarter/vellum
 Confirm the binary is available:
 
 ```sh
-vellum --version
+vlm --version
 ```
 
 ## Build from source
@@ -26,6 +26,8 @@ git clone https://github.com/dkarter/vellum.git
 cd vellum
 cargo install --path .
 ```
+
+The project and Cargo package remain named Vellum, but the installed executable is `vlm`. The former `vellum` executable name is not installed.
 
 ## Optional dependencies
 

@@ -1,5 +1,5 @@
 [shell_alias]
-vellum = "cargo run --release --"
+vlm = "cargo run --release --bin vlm --"
 
 [tools]
 "npm:@fission-ai/openspec" = { version = "latest", aube_args = "--deny-build=@fission-ai/openspec" }

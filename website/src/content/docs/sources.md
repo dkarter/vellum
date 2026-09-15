@@ -58,7 +58,7 @@ stdin = true
 ```
 
 ```sh
-printf '%s\n' '{"id":"one","name":"First"}' | vellum custom.toml
+printf '%s\n' '{"id":"one","name":"First"}' | vlm custom.toml
 ```
 
 Standard input is consumed once before the interface starts. It cannot be combined with `source.refresh_ms` or actions using `on_success = "refresh"`.
@@ -67,13 +67,13 @@ CLI source options override the palette's configured source for one run:
 
 ```sh
 # Plain lines need no palette or mapping.
-fd --type f | vellum --stdin
+fd --type f | vlm --stdin
 
 # Copy dotted JSON fields to names expected by the palette.
-producer | vellum custom --stdin --field title=details.name --field value=id
+producer | vlm custom --stdin --field title=details.name --field value=id
 
 # Use the installed jq executable for arbitrary JSON transformations.
-producer | vellum custom --jq '.[] | {id, name}'
+producer | vlm custom --jq '.[] | {id, name}'
 ```
 
 `--field TARGET=SOURCE` is repeatable and preserves the original fields. `SOURCE` may be a dotted object path. `--jq` runs `jq -c FILTER`, so `jq` must be available on `PATH`.
