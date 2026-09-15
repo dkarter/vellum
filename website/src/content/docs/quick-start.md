@@ -8,11 +8,11 @@ description: Sync Vellum's official palettes and build a first custom palette.
 Install the bundled palettes into your user configuration directory:
 
 ```sh
-vellum palettes sync
-vellum files
+vlm palettes sync
+vlm files
 ```
 
-Vellum uses `$XDG_CONFIG_HOME/vellum/palettes`, falling back to `~/.config/vellum/palettes`. Existing files are skipped. Use `vellum palettes sync --overwrite` only when you want to replace local copies with the bundled versions.
+Vellum uses `$XDG_CONFIG_HOME/vellum/palettes`, falling back to `~/.config/vellum/palettes`. Existing files are skipped. Use `vlm palettes sync --overwrite` only when you want to replace local copies with the bundled versions.
 
 ## Create a palette
 
@@ -37,13 +37,13 @@ template = [
 Open it by name:
 
 ```sh
-project="$(vellum projects)" && cd "${project/#\~/$HOME}"
+project="$(vlm projects)" && cd "${project/#\~/$HOME}"
 ```
 
 A name without a path extension resolves beneath the user palette directory. With no argument, Vellum opens the palette named `default`. You can also pass a path directly:
 
 ```sh
-vellum ./examples/demo.toml
+vlm ./examples/demo.toml
 ```
 
 ## Learn the model

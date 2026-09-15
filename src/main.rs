@@ -62,7 +62,7 @@ fn main() -> Result<()> {
             return Ok(());
         }
         Cli::Version => {
-            println!("vellum {}", env!("CARGO_PKG_VERSION"));
+            println!("vlm {}", env!("CARGO_PKG_VERSION"));
             return Ok(());
         }
     };
@@ -582,10 +582,10 @@ fn parse_run_options(args: &[String]) -> Result<RunOptions> {
             "--stdin-default-palette" => default_stdin_palette = true,
             "-1" | "--select-1" => select_1 = true,
             argument if argument.starts_with('-') => {
-                bail!("unknown option '{argument}'; run 'vellum --help' for usage")
+                bail!("unknown option '{argument}'; run 'vlm --help' for usage")
             }
             argument if palette.is_none() => palette = Some(argument.to_owned()),
-            _ => bail!("invalid arguments; run 'vellum --help' for usage"),
+            _ => bail!("invalid arguments; run 'vlm --help' for usage"),
         }
         index += 1;
     }
@@ -760,7 +760,7 @@ fn palette_identity(path: &std::path::Path) -> String {
 
 fn print_help() {
     println!(
-        "Vellum {}\n\nUsage:\n  vellum [PALETTE] [SOURCE OPTIONS]\n  vellum palettes sync [--overwrite]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nCommands:\n  palettes sync  Install bundled palettes without replacing existing files\n\nSource options:\n  --stdin                 Auto-detect plain lines, JSON, or NDJSON from standard input\n  --lines FIELD           Wrap each nonempty input line as {{FIELD: line}}\n  --field TARGET=SOURCE   Copy a dotted source field to a target field (repeatable)\n  --jq FILTER             Transform standard-input JSON through jq\n\nOptions:\n  -1, --select-1  Accept the initial result without opening the menu when exactly one exists\n  --overwrite     Replace existing official palette files during sync\n  -h, --help      Print help\n  -V, --version   Print version",
+        "Vellum {}\n\nUsage:\n  vlm [PALETTE] [SOURCE OPTIONS]\n  vlm palettes sync [--overwrite]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nCommands:\n  palettes sync  Install bundled palettes without replacing existing files\n\nSource options:\n  --stdin                 Auto-detect plain lines, JSON, or NDJSON from standard input\n  --lines FIELD           Wrap each nonempty input line as {{FIELD: line}}\n  --field TARGET=SOURCE   Copy a dotted source field to a target field (repeatable)\n  --jq FILTER             Transform standard-input JSON through jq\n\nOptions:\n  -1, --select-1  Accept the initial result without opening the menu when exactly one exists\n  --overwrite     Replace existing official palette files during sync\n  -h, --help      Print help\n  -V, --version   Print version",
         env!("CARGO_PKG_VERSION")
     );
 }

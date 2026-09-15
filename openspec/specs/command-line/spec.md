@@ -77,7 +77,7 @@ filter. Simple `TARGET=SOURCE` field mappings SHALL be repeatable.
 
 #### Scenario: Stdin without a palette uses a generic finder {#CLI-008}
 
-- GIVEN `vellum --stdin` without a palette argument
+- GIVEN `vlm --stdin` without a palette argument
 - WHEN CLI arguments are parsed and plain lines are loaded
 - THEN Vellum uses an embedded palette that displays and returns each line
 

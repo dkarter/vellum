@@ -19,10 +19,10 @@
 
 ## Palette Authoring
 
-- [ ] Add `vellum check <palette>` for headless configuration validation.
+- [ ] Add `vlm check <palette>` for headless configuration validation.
 - [ ] Validate layered configuration, bindings, templates, actions, and built-in source contracts.
 - [ ] Add an opt-in flag for running and validating the configured source.
-- [ ] Add `vellum palettes list` with descriptions and dependency availability.
+- [ ] Add `vlm palettes list` with descriptions and dependency availability.
 - [ ] Provide a bundled palette for discovering and opening installed palettes.
 
 ## Website and Documentation
