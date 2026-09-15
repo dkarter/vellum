@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/dkarter/vellum/compare/v0.12.0...v1.0.0) (2026-09-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename binary to vlm ([#44](https://github.com/dkarter/vellum/issues/44))
+
+### Features
+
+* rename binary to vlm ([#44](https://github.com/dkarter/vellum/issues/44)) ([f87fa5c](https://github.com/dkarter/vellum/commit/f87fa5c282ebb8f2f0568223caee08ca9a1b85e2))
+
 ## [0.12.0](https://github.com/dkarter/vellum/compare/v0.11.0...v0.12.0) (2026-09-14)
 
 
