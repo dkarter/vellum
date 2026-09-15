@@ -6,7 +6,8 @@ vellum = "cargo run --release --"
 aube = "latest"
 node = "24"
 ripgrep = "latest"
-rust = "1.98.0"
+rust = { version = "1.98.0", mr_boxington = true }
+mr-boxington = "1.11.0"
 
 [settings]
 npm.package_manager = "aube"
