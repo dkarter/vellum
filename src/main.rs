@@ -991,14 +991,14 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn src_021_dropping_source_worker_cancels_and_joins_it() {
+    fn src_021_cancellation_catches_descendants_forked_during_shutdown() {
         use nix::{errno::Errno, sys::signal::kill, unistd::Pid};
 
         let pid_file = env::temp_dir().join(format!("vellum-source-child-{}", std::process::id()));
         let _ = fs::remove_file(&pid_file);
         let source = vellum::config::SourceConfig {
             cmd: Some(format!(
-                "sleep 30 & echo $! > '{}'; wait",
+                "i=0; while [ $i -lt 50 ]; do sleep 30 & echo $! >> '{}'; i=$((i + 1)); sleep 0.01; done; wait",
                 pid_file.display()
             )),
             builtin: None,
@@ -1013,24 +1013,27 @@ mod tests {
             }
             thread::sleep(Duration::from_millis(5));
         }
-        let child_pid: i32 = fs::read_to_string(&pid_file)
-            .unwrap()
-            .trim()
-            .parse()
-            .unwrap();
-
         let started = Instant::now();
         drop(worker);
 
-        assert!(started.elapsed() < Duration::from_millis(500));
+        assert!(started.elapsed() < Duration::from_secs(2));
+        let child_pids: Vec<i32> = fs::read_to_string(&pid_file)
+            .unwrap()
+            .lines()
+            .map(|pid| pid.parse().unwrap())
+            .collect();
+        assert!(!child_pids.is_empty());
         for _ in 0..100 {
-            if kill(Pid::from_raw(child_pid), None) == Err(Errno::ESRCH) {
+            if child_pids
+                .iter()
+                .all(|pid| kill(Pid::from_raw(*pid), None) == Err(Errno::ESRCH))
+            {
                 let _ = fs::remove_file(pid_file);
                 return;
             }
             thread::sleep(Duration::from_millis(5));
         }
-        panic!("source descendant {child_pid} survived worker cancellation");
+        panic!("a source descendant survived worker cancellation");
     }
 
     #[test]

@@ -2,17 +2,21 @@ use std::{
     fs,
     io::{self, BufRead, BufReader, Read},
     path::Path,
-    process::{Child, Command, ExitStatus, Output, Stdio},
+    process::{Command, Output, Stdio},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 #[cfg(unix)]
-use std::os::unix::process::CommandExt;
+use std::os::{fd::AsRawFd, unix::process::CommandExt};
+#[cfg(not(unix))]
+use std::{
+    process::{Child, ExitStatus},
+    thread,
+};
 
 use anyhow::{Context, Result, bail};
 use json_comments::StripComments;
@@ -24,6 +28,7 @@ use crate::config::SourceConfig;
 pub type SourceItem = Map<String, Value>;
 
 const COMMAND_POLL_RATE: Duration = Duration::from_millis(5);
+const COMMAND_CANCELLATION_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Default)]
 pub struct Cancellation(Arc<AtomicBool>);
@@ -360,12 +365,127 @@ pub(crate) fn run_command_cancellable(
         bail!("{label} was cancelled");
     }
 
+    #[cfg(unix)]
+    return run_command_cancellable_unix(command, label, cancellation);
+    #[cfg(not(unix))]
+    return run_command_cancellable_threaded(command, label, cancellation);
+}
+
+#[cfg(unix)]
+fn run_command_cancellable_unix(
+    command: &mut Command,
+    label: &str,
+    cancellation: &Cancellation,
+) -> Result<Output> {
+    use nix::{
+        errno::Errno,
+        sys::signal::{Signal, kill},
+        unistd::Pid,
+    };
+
     command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    #[cfg(unix)]
     command.process_group(0);
+    let mut child = command
+        .spawn()
+        .with_context(|| format!("failed to run {label}"))?;
+    let mut stdout = child.stdout.take().context("failed to capture stdout")?;
+    let mut stderr = child.stderr.take().context("failed to capture stderr")?;
+    set_nonblocking(stdout.as_raw_fd()).context("failed to configure source stdout")?;
+    set_nonblocking(stderr.as_raw_fd()).context("failed to configure source stderr")?;
+
+    let mut status = None;
+    let mut stdout_output = Vec::new();
+    let mut stderr_output = Vec::new();
+    let mut stdout_closed = false;
+    let mut stderr_closed = false;
+    let mut cancellation_started = None;
+    loop {
+        if cancellation.is_cancelled() && cancellation_started.is_none() {
+            cancellation_started = Some(Instant::now());
+        }
+        if let Some(started) = cancellation_started {
+            let process_group =
+                i32::try_from(child.id()).context("child process ID is too large")?;
+            match kill(Pid::from_raw(-process_group), Signal::SIGKILL) {
+                Ok(()) | Err(Errno::ESRCH) => {}
+                Err(error) => {
+                    return Err(error).context("failed to terminate source process group");
+                }
+            }
+            if let Err(error) = child.kill()
+                && error.kind() != io::ErrorKind::InvalidInput
+            {
+                return Err(error).context("failed to terminate source process");
+            }
+            if started.elapsed() >= COMMAND_CANCELLATION_TIMEOUT {
+                child
+                    .wait()
+                    .context("failed to reap cancelled source process")?;
+                bail!("timed out draining {label} after cancellation");
+            }
+        }
+        stdout_closed |= read_available(&mut stdout, &mut stdout_output)
+            .with_context(|| format!("failed to read {label} stdout"))?;
+        stderr_closed |= read_available(&mut stderr, &mut stderr_output)
+            .with_context(|| format!("failed to read {label} stderr"))?;
+        if status.is_none() {
+            status = child
+                .try_wait()
+                .with_context(|| format!("failed to wait for {label}"))?;
+        }
+        if status.is_some() && stdout_closed && stderr_closed {
+            break;
+        }
+        std::thread::sleep(COMMAND_POLL_RATE);
+    }
+
+    if cancellation_started.is_some() {
+        bail!("{label} was cancelled");
+    }
+
+    Ok(Output {
+        status: status.expect("completed command has an exit status"),
+        stdout: stdout_output,
+        stderr: stderr_output,
+    })
+}
+
+#[cfg(unix)]
+fn set_nonblocking(fd: std::os::fd::RawFd) -> Result<()> {
+    use nix::fcntl::{FcntlArg, OFlag, fcntl};
+
+    let flags = OFlag::from_bits_truncate(fcntl(fd, FcntlArg::F_GETFL)?);
+    fcntl(fd, FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK))?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn read_available(pipe: &mut impl Read, output: &mut Vec<u8>) -> io::Result<bool> {
+    let mut buffer = [0; 8 * 1024];
+    loop {
+        match pipe.read(&mut buffer) {
+            Ok(0) => return Ok(true),
+            Ok(read) => output.extend_from_slice(&buffer[..read]),
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => return Ok(false),
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn run_command_cancellable_threaded(
+    command: &mut Command,
+    label: &str,
+    cancellation: &Cancellation,
+) -> Result<Output> {
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     let mut child = command
         .spawn()
         .with_context(|| format!("failed to run {label}"))?;
@@ -402,12 +522,14 @@ pub(crate) fn run_command_cancellable(
     })
 }
 
+#[cfg(not(unix))]
 fn read_output(mut pipe: impl Read) -> io::Result<Vec<u8>> {
     let mut output = Vec::new();
     pipe.read_to_end(&mut output)?;
     Ok(output)
 }
 
+#[cfg(not(unix))]
 fn join_output(
     handle: thread::JoinHandle<io::Result<Vec<u8>>>,
     label: &str,
@@ -419,6 +541,7 @@ fn join_output(
         .with_context(|| format!("failed to read {label} {stream}"))
 }
 
+#[cfg(not(unix))]
 fn terminate_and_drain(
     child: &mut Child,
     stdout: thread::JoinHandle<io::Result<Vec<u8>>>,
@@ -432,30 +555,6 @@ fn terminate_and_drain(
     stdout?;
     stderr?;
     Ok(())
-}
-
-#[cfg(unix)]
-fn terminate(child: &mut Child) -> Result<ExitStatus> {
-    use nix::{
-        errno::Errno,
-        sys::signal::{Signal, kill},
-        unistd::Pid,
-    };
-
-    let process_group = i32::try_from(child.id()).context("child process ID is too large")?;
-    let group_result = match kill(Pid::from_raw(-process_group), Signal::SIGKILL) {
-        Ok(()) | Err(Errno::ESRCH) => Ok(()),
-        Err(error) => Err(error),
-    };
-    let child_result = match child.kill() {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == io::ErrorKind::InvalidInput => Ok(()),
-        Err(error) => Err(error),
-    };
-    let status = child.wait().context("failed to reap child process")?;
-    group_result.context("failed to terminate child process group")?;
-    child_result.context("failed to terminate child process")?;
-    Ok(status)
 }
 
 #[cfg(not(unix))]
