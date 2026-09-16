@@ -311,7 +311,7 @@ fn run(
     let mut dirty = true;
     let mut cursor_mode = None;
     if let Some(result) = receive_refresh(&refresh_result)? {
-        dirty |= apply_source_result(app, result, 0)?;
+        dirty |= apply_source_result(app, result, 0, initial_source_pending)?;
         refresh_result = None;
         last_refresh = Instant::now();
         initial_source_pending = false;
@@ -381,7 +381,7 @@ fn run(
         }
 
         if let Some(result) = receive_refresh(&refresh_result)? {
-            dirty |= apply_source_result(app, result, elapsed_ms)?;
+            dirty |= apply_source_result(app, result, elapsed_ms, initial_source_pending)?;
             refresh_result = None;
             last_refresh = Instant::now();
             initial_source_pending = false;
@@ -412,8 +412,9 @@ fn apply_source_result(
     app: &mut App,
     result: Result<Vec<source::SourceItem>>,
     elapsed_ms: u64,
+    clear_loading: bool,
 ) -> Result<bool> {
-    let status_changed = app.clear_status();
+    let status_changed = clear_loading && app.clear_status();
     Ok(status_changed | app.replace_source(result?, elapsed_ms))
 }
 
@@ -985,8 +986,12 @@ mod tests {
         );
         app.start_loading();
 
-        assert!(apply_source_result(&mut app, Ok(Vec::new()), 0).unwrap());
+        assert!(apply_source_result(&mut app, Ok(Vec::new()), 0, true).unwrap());
         assert_eq!(app.status, None);
+
+        app.finish_action(Some("action failed".into()));
+        assert!(!apply_source_result(&mut app, Ok(Vec::new()), 0, false).unwrap());
+        assert_eq!(app.status.as_deref(), Some("action failed"));
     }
 
     #[test]
@@ -1034,6 +1039,25 @@ mod tests {
             thread::sleep(Duration::from_millis(5));
         }
         panic!("a source descendant survived worker cancellation");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn src_021_cancellation_interrupts_continuous_source_output() {
+        let source = vellum::config::SourceConfig {
+            cmd: Some("yes".into()),
+            builtin: None,
+            file: None,
+            stdin: false,
+            refresh_ms: 0,
+        };
+        let worker = spawn_refresh(source);
+        thread::sleep(Duration::from_millis(50));
+
+        let started = Instant::now();
+        drop(worker);
+
+        assert!(started.elapsed() < Duration::from_secs(2));
     }
 
     #[test]

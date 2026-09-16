@@ -29,6 +29,7 @@ pub type SourceItem = Map<String, Value>;
 
 const COMMAND_POLL_RATE: Duration = Duration::from_millis(5);
 const COMMAND_CANCELLATION_TIMEOUT: Duration = Duration::from_secs(1);
+const PIPE_READ_BUDGET: usize = 64 * 1024;
 
 #[derive(Clone, Default)]
 pub struct Cancellation(Arc<AtomicBool>);
@@ -465,10 +466,17 @@ fn set_nonblocking(fd: std::os::fd::RawFd) -> Result<()> {
 #[cfg(unix)]
 fn read_available(pipe: &mut impl Read, output: &mut Vec<u8>) -> io::Result<bool> {
     let mut buffer = [0; 8 * 1024];
+    let mut total_read = 0;
     loop {
         match pipe.read(&mut buffer) {
             Ok(0) => return Ok(true),
-            Ok(read) => output.extend_from_slice(&buffer[..read]),
+            Ok(read) => {
+                output.extend_from_slice(&buffer[..read]);
+                total_read += read;
+                if total_read >= PIPE_READ_BUDGET {
+                    return Ok(false);
+                }
+            }
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => return Ok(false),
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
             Err(error) => return Err(error),
