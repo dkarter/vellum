@@ -50,6 +50,41 @@ url = "https://github.com/jdx/aube/releases/download/v2.2.0/aube-v2.2.0-x86_64-p
 url_api = "https://api.github.com/repos/jdx/aube/releases/assets/529724125"
 provenance = "github-attestations"
 
+[[tools.mr-boxington]]
+version = "1.11.0"
+backend = "packslip:github.com/jdx/mr-boxington"
+specifiers = ["1.11.0"]
+
+[tools.mr-boxington."platforms.linux-arm64"]
+checksum = "sha256:feaf1ea4ec59aef4559d8fcafc49586e60ff718f0e4eb9ee40ac788536cce5a3"
+url = "https://github.com/jdx/mr-boxington/releases/download/v1.11.0/mbx-aarch64-unknown-linux-gnu.tar.gz"
+signer = "sigstore-oidc:https://github.com/jdx/mr-boxington/.github/workflows/release.yml"
+
+[tools.mr-boxington."platforms.linux-arm64-musl"]
+checksum = "sha256:1e33c4998187a992ad24eaaeb7b6d6393a875094d32f1589a0239b34e611fbd0"
+url = "https://github.com/jdx/mr-boxington/releases/download/v1.11.0/mbx-aarch64-unknown-linux-musl.tar.gz"
+signer = "sigstore-oidc:https://github.com/jdx/mr-boxington/.github/workflows/release.yml"
+
+[tools.mr-boxington."platforms.linux-x64"]
+checksum = "sha256:86562cc73c316638843e4854c115df38a6d84860ba17b0af2e140c5e9f3c9e94"
+url = "https://github.com/jdx/mr-boxington/releases/download/v1.11.0/mbx-x86_64-unknown-linux-gnu.tar.gz"
+signer = "sigstore-oidc:https://github.com/jdx/mr-boxington/.github/workflows/release.yml"
+
+[tools.mr-boxington."platforms.linux-x64-musl"]
+checksum = "sha256:f3d59e84b57cb2c890ae921f64eae8aead8aec23bc8e8384d59c01875365f535"
+url = "https://github.com/jdx/mr-boxington/releases/download/v1.11.0/mbx-x86_64-unknown-linux-musl.tar.gz"
+signer = "sigstore-oidc:https://github.com/jdx/mr-boxington/.github/workflows/release.yml"
+
+[tools.mr-boxington."platforms.macos-arm64"]
+checksum = "sha256:0e6b84b549421eb065872914045925aafe13098b56d302e94aa836e6121b6e87"
+url = "https://github.com/jdx/mr-boxington/releases/download/v1.11.0/mbx-aarch64-apple-darwin.tar.gz"
+signer = "sigstore-oidc:https://github.com/jdx/mr-boxington/.github/workflows/release.yml"
+
+[tools.mr-boxington."platforms.windows-x64"]
+checksum = "sha256:1d3dc3a3f0caeaf07049966f6e1ec67240a060d9703fbbc7f73aacd814abd0ac"
+url = "https://github.com/jdx/mr-boxington/releases/download/v1.11.0/mbx-x86_64-pc-windows-msvc.zip"
+signer = "sigstore-oidc:https://github.com/jdx/mr-boxington/.github/workflows/release.yml"
+
 [[tools.node]]
 version = "24.20.0"
 backend = "core:node"
