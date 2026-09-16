@@ -9,7 +9,9 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-use crate::source::{SourceItem, command_output, ensure_success};
+use crate::source::{
+    Cancellation, SourceItem, command_output_cancellable, ensure_success, run_command_cancellable,
+};
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -21,30 +23,39 @@ pub enum BuiltinSource {
 
 impl BuiltinSource {
     pub fn run(self) -> Result<Vec<SourceItem>> {
+        self.run_cancellable(None)
+    }
+
+    pub(crate) fn run_cancellable(
+        self,
+        cancellation: Option<&Cancellation>,
+    ) -> Result<Vec<SourceItem>> {
         match self {
-            Self::HerdrWorkspaces => run_herdr_workspaces(),
-            Self::HerdrAgents => run_herdr_agents(),
-            Self::Files => run_files(),
+            Self::HerdrWorkspaces => run_herdr_workspaces(cancellation),
+            Self::HerdrAgents => run_herdr_agents(cancellation),
+            Self::Files => run_files(cancellation),
         }
     }
 }
 
-fn run_herdr_workspaces() -> Result<Vec<SourceItem>> {
-    herdr_workspaces(&command_output(
+fn run_herdr_workspaces(cancellation: Option<&Cancellation>) -> Result<Vec<SourceItem>> {
+    herdr_workspaces(&command_output_cancellable(
         Command::new("herdr").args(["api", "snapshot"]),
         "herdr api snapshot",
+        cancellation,
     )?)
 }
 
-fn run_herdr_agents() -> Result<Vec<SourceItem>> {
-    herdr_agents(&command_output(
+fn run_herdr_agents(cancellation: Option<&Cancellation>) -> Result<Vec<SourceItem>> {
+    herdr_agents(&command_output_cancellable(
         Command::new("herdr").args(["api", "snapshot"]),
         "herdr api snapshot",
+        cancellation,
     )?)
 }
 
-fn run_files() -> Result<Vec<SourceItem>> {
-    let output = file_command().output().context("failed to run fd")?;
+fn run_files(cancellation: Option<&Cancellation>) -> Result<Vec<SourceItem>> {
+    let output = run_command_cancellable(&mut file_command(), "fd", cancellation)?;
     ensure_success("fd", &output)?;
     output
         .stdout

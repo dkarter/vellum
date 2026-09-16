@@ -65,6 +65,7 @@ pub struct App {
     pub action_query: String,
     pub action_cursor: usize,
     pub status: Option<String>,
+    status_is_error: bool,
     active_filter: Option<usize>,
     list_page_size: usize,
     pub selected: usize,
@@ -152,6 +153,7 @@ impl App {
             action_query: String::new(),
             action_cursor: 0,
             status: None,
+            status_is_error: false,
             active_filter: None,
             list_page_size: 1,
             selected: 0,
@@ -367,7 +369,22 @@ impl App {
 
     pub fn finish_action(&mut self, error: Option<String>) {
         self.outcome = Outcome::Running;
+        self.status_is_error = error.is_some();
         self.status = error;
+    }
+
+    pub fn start_loading(&mut self) {
+        self.status = Some("loading source...".into());
+        self.status_is_error = false;
+    }
+
+    pub fn clear_status(&mut self) -> bool {
+        self.status_is_error = false;
+        self.status.take().is_some()
+    }
+
+    pub fn status_is_error(&self) -> bool {
+        self.status_is_error
     }
 
     pub fn take_availability_checks(&mut self) -> Vec<AvailabilityCommand> {

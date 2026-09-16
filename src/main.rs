@@ -31,6 +31,7 @@ use vellum::{
 };
 
 const REFRESH_POLL_RATE: Duration = Duration::from_millis(50);
+const INITIAL_SOURCE_POLL_RATE: Duration = Duration::from_millis(5);
 const MAX_EVENTS_PER_TICK: usize = 64;
 const STDIN_PALETTE: &str = r#"
 [source]
@@ -45,6 +46,36 @@ type Tui = Terminal<CrosstermBackend<io::Stderr>>;
 struct TerminalSession {
     terminal: Tui,
     active: bool,
+}
+
+struct SourceWorker {
+    receiver: Receiver<Result<Vec<source::SourceItem>>>,
+    cancellation: source::Cancellation,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl SourceWorker {
+    fn try_recv(&self) -> std::result::Result<Result<Vec<source::SourceItem>>, TryRecvError> {
+        self.receiver.try_recv()
+    }
+
+    #[cfg(test)]
+    fn recv_timeout(
+        &self,
+        timeout: Duration,
+    ) -> std::result::Result<Result<Vec<source::SourceItem>>, std::sync::mpsc::RecvTimeoutError>
+    {
+        self.receiver.recv_timeout(timeout)
+    }
+}
+
+impl Drop for SourceWorker {
+    fn drop(&mut self) {
+        self.cancellation.cancel();
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
 }
 
 fn main() -> Result<()> {
@@ -120,16 +151,18 @@ fn main() -> Result<()> {
     } else {
         None
     };
-    let source_items = if let Some(items) = stdin_items {
-        items
+    let (source_items, initial_source) = if let Some(items) = stdin_items {
+        (items, None)
     } else if let Some(cache) = &run_request.source_cache {
         if config.actions.has_refresh_action() {
             bail!("stdin CLI sources cannot be used with action on_success = 'refresh'");
         }
         config.source.refresh_ms = 0;
-        source::load_json(cache)?
+        (source::load_json(cache)?, None)
+    } else if run_request.select_1 {
+        (source::run(&config.source)?, None)
     } else {
-        source::run(&config.source)?
+        (Vec::new(), Some(spawn_refresh(config.source.clone())))
     };
     let mut frecency = if config.frecency.enabled {
         let root = data_root().context(
@@ -167,6 +200,9 @@ fn main() -> Result<()> {
         frecency_scores,
         config.actions.clone(),
     );
+    if initial_source.is_some() {
+        app.start_loading();
+    }
     if run_request.select_1 {
         app.accept_if_only();
     }
@@ -183,7 +219,7 @@ fn main() -> Result<()> {
         outcome
     } else {
         let mut terminal = TerminalSession::init().context("failed to initialize terminal")?;
-        let result = run(&mut terminal.terminal, &mut app, &config);
+        let result = run(&mut terminal.terminal, &mut app, &config, initial_source);
         terminal.restore()?;
         result?
     };
@@ -258,16 +294,28 @@ fn write_outcome(writer: &mut impl Write, outcome: &Outcome) -> Result<()> {
     Ok(())
 }
 
-fn run(terminal: &mut Tui, app: &mut App, config: &Config) -> Result<Outcome> {
+fn run(
+    terminal: &mut Tui,
+    app: &mut App,
+    config: &Config,
+    initial_source: Option<SourceWorker>,
+) -> Result<Outcome> {
     let started = Instant::now();
     let mut last_animation = Instant::now();
     let mut last_refresh = Instant::now();
-    let mut refresh_result: Option<Receiver<Result<Vec<source::SourceItem>>>> = None;
+    let mut refresh_result = initial_source;
+    let mut initial_source_pending = refresh_result.is_some();
     let mut availability_results: Vec<Receiver<(action::AvailabilityCommand, bool)>> = Vec::new();
     let refresh_interval = Duration::from_millis(config.source.refresh_ms);
     let animation_interval = app.animation_interval();
     let mut dirty = true;
     let mut cursor_mode = None;
+    if let Some(result) = receive_refresh(&refresh_result)? {
+        dirty |= apply_source_result(app, result, 0, initial_source_pending)?;
+        refresh_result = None;
+        last_refresh = Instant::now();
+        initial_source_pending = false;
+    }
     loop {
         if dirty {
             ui::redraw(terminal, app, config)?;
@@ -289,7 +337,13 @@ fn run(terminal: &mut Tui, app: &mut App, config: &Config) -> Result<Outcome> {
                 last_animation,
                 refresh_interval,
                 last_refresh,
-                refresh_result.is_some() || !availability_results.is_empty(),
+                if initial_source_pending {
+                    Some(INITIAL_SOURCE_POLL_RATE)
+                } else if refresh_result.is_some() || !availability_results.is_empty() {
+                    Some(REFRESH_POLL_RATE)
+                } else {
+                    None
+                },
                 app.availability_refresh_in(),
             )
         } else {
@@ -327,8 +381,10 @@ fn run(terminal: &mut Tui, app: &mut App, config: &Config) -> Result<Outcome> {
         }
 
         if let Some(result) = receive_refresh(&refresh_result)? {
-            dirty |= app.replace_source(result?, elapsed_ms);
+            dirty |= apply_source_result(app, result, elapsed_ms, initial_source_pending)?;
             refresh_result = None;
+            last_refresh = Instant::now();
+            initial_source_pending = false;
         }
         let completed_availability = receive_availability(&mut availability_results)?;
         if !completed_availability.is_empty() {
@@ -350,6 +406,16 @@ fn run(terminal: &mut Tui, app: &mut App, config: &Config) -> Result<Outcome> {
             last_refresh = Instant::now();
         }
     }
+}
+
+fn apply_source_result(
+    app: &mut App,
+    result: Result<Vec<source::SourceItem>>,
+    elapsed_ms: u64,
+    clear_loading: bool,
+) -> Result<bool> {
+    let status_changed = clear_loading && app.clear_status();
+    Ok(status_changed | app.replace_source(result?, elapsed_ms))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -424,18 +490,18 @@ fn next_timeout(
     last_animation: Instant,
     refresh_interval: Duration,
     last_refresh: Instant,
-    refresh_pending: bool,
+    pending_poll_rate: Option<Duration>,
     availability_refresh_in: Option<Duration>,
 ) -> Duration {
     let mut timeout = Duration::from_secs(3_600);
     if let Some(interval) = animation_interval {
         timeout = timeout.min(interval.saturating_sub(last_animation.elapsed()));
     }
-    if !refresh_interval.is_zero() && !refresh_pending {
+    if !refresh_interval.is_zero() && pending_poll_rate.is_none() {
         timeout = timeout.min(refresh_interval.saturating_sub(last_refresh.elapsed()));
     }
-    if refresh_pending {
-        timeout = timeout.min(REFRESH_POLL_RATE);
+    if let Some(poll_rate) = pending_poll_rate {
+        timeout = timeout.min(poll_rate);
     }
     if let Some(refresh_in) = availability_refresh_in {
         timeout = timeout.min(refresh_in);
@@ -443,20 +509,24 @@ fn next_timeout(
     timeout
 }
 
-fn spawn_refresh(
-    source: vellum::config::SourceConfig,
-) -> Receiver<Result<Vec<source::SourceItem>>> {
+fn spawn_refresh(source: vellum::config::SourceConfig) -> SourceWorker {
     let (sender, receiver) = mpsc::channel();
-    thread::spawn(move || {
-        let _ = sender.send(source::run(&source));
+    let cancellation = source::Cancellation::default();
+    let worker_cancellation = cancellation.clone();
+    let handle = thread::spawn(move || {
+        let _ = sender.send(source::run_cancellable(&source, &worker_cancellation));
     });
-    receiver
+    SourceWorker {
+        receiver,
+        cancellation,
+        handle: Some(handle),
+    }
 }
 
 fn receive_refresh(
-    receiver: &Option<Receiver<Result<Vec<source::SourceItem>>>>,
+    receiver: &Option<SourceWorker>,
 ) -> Result<Option<Result<Vec<source::SourceItem>>>> {
-    match receiver.as_ref().map(Receiver::try_recv) {
+    match receiver.as_ref().map(SourceWorker::try_recv) {
         Some(Ok(result)) => Ok(Some(result)),
         Some(Err(TryRecvError::Disconnected)) => bail!("source refresh worker disconnected"),
         Some(Err(TryRecvError::Empty)) | None => Ok(None),
@@ -884,6 +954,110 @@ mod tests {
             .unwrap();
 
         assert!(result.1);
+    }
+
+    #[test]
+    fn ui_014_initial_source_load_runs_on_a_background_worker() {
+        let source = vellum::config::SourceConfig {
+            cmd: Some("sleep 0.05; printf '%s' '[{\"id\":\"one\"}]'".into()),
+            builtin: None,
+            file: None,
+            stdin: false,
+            refresh_ms: 0,
+        };
+
+        let receiver = spawn_refresh(source);
+        assert!(matches!(receiver.try_recv(), Err(TryRecvError::Empty)));
+        let items = receiver
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(items[0]["id"], "one");
+
+        let config = Config::parse(STDIN_PALETTE).unwrap();
+        let mut app = App::new(
+            Vec::new(),
+            config.item,
+            config.keybindings,
+            config.filters,
+            config.input,
+            config.search.enabled,
+        );
+        app.start_loading();
+
+        assert!(apply_source_result(&mut app, Ok(Vec::new()), 0, true).unwrap());
+        assert_eq!(app.status, None);
+
+        app.finish_action(Some("action failed".into()));
+        assert!(!apply_source_result(&mut app, Ok(Vec::new()), 0, false).unwrap());
+        assert_eq!(app.status.as_deref(), Some("action failed"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn src_021_cancellation_catches_descendants_forked_during_shutdown() {
+        use nix::{errno::Errno, sys::signal::kill, unistd::Pid};
+
+        let pid_file = env::temp_dir().join(format!("vellum-source-child-{}", std::process::id()));
+        let _ = fs::remove_file(&pid_file);
+        let source = vellum::config::SourceConfig {
+            cmd: Some(format!(
+                "i=0; while [ $i -lt 50 ]; do sleep 30 & echo $! >> '{}'; i=$((i + 1)); sleep 0.01; done; wait",
+                pid_file.display()
+            )),
+            builtin: None,
+            file: None,
+            stdin: false,
+            refresh_ms: 0,
+        };
+        let worker = spawn_refresh(source);
+        for _ in 0..100 {
+            if pid_file.exists() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        let started = Instant::now();
+        drop(worker);
+
+        assert!(started.elapsed() < Duration::from_secs(2));
+        let child_pids: Vec<i32> = fs::read_to_string(&pid_file)
+            .unwrap()
+            .lines()
+            .map(|pid| pid.parse().unwrap())
+            .collect();
+        assert!(!child_pids.is_empty());
+        for _ in 0..100 {
+            if child_pids
+                .iter()
+                .all(|pid| kill(Pid::from_raw(*pid), None) == Err(Errno::ESRCH))
+            {
+                let _ = fs::remove_file(pid_file);
+                return;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        panic!("a source descendant survived worker cancellation");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn src_021_cancellation_interrupts_continuous_source_output() {
+        let source = vellum::config::SourceConfig {
+            cmd: Some("yes".into()),
+            builtin: None,
+            file: None,
+            stdin: false,
+            refresh_ms: 0,
+        };
+        let worker = spawn_refresh(source);
+        thread::sleep(Duration::from_millis(50));
+
+        let started = Instant::now();
+        drop(worker);
+
+        assert!(started.elapsed() < Duration::from_secs(2));
     }
 
     #[test]

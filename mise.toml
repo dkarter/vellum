@@ -20,6 +20,10 @@ DO_NOT_TRACK = 1
 description = "Run the full Rust test suite"
 run = "cargo test"
 
+[tasks."benchmark:startup"]
+description = "Benchmark Vellum process and interactive startup"
+run = "bash scripts/benchmark-startup.sh"
+
 [tasks.website-dev]
 description = "Start the website development server"
 run = "aube --dir website run dev"
