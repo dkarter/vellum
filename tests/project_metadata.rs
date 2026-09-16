@@ -40,7 +40,7 @@ fn meta_002_spec_runner_resolves_all_file_scenarios() {
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
-        "src_001\nsrc_002\nsrc_003\nsrc_004\nsrc_005\nsrc_006\nsrc_007\nsrc_008\nsrc_009\nsrc_010\nsrc_011\nsrc_012\nsrc_013\nsrc_014\nsrc_015\nsrc_016\nsrc_017\nsrc_018\nsrc_019\nsrc_020\n"
+        "src_001\nsrc_002\nsrc_003\nsrc_004\nsrc_005\nsrc_006\nsrc_007\nsrc_008\nsrc_009\nsrc_010\nsrc_011\nsrc_012\nsrc_013\nsrc_014\nsrc_015\nsrc_016\nsrc_017\nsrc_018\nsrc_019\nsrc_020\nsrc_021\n"
     );
 }
 

@@ -1,0 +1,6 @@
+[source]
+cmd = "sleep 0.25; printf '%s' '[{\"id\":\"one\",\"name\":\"One\"}]'"
+
+[item]
+value = "$id"
+template = [["$name"]]

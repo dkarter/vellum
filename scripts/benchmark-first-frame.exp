@@ -1,0 +1,12 @@
+#!/usr/bin/expect -f
+set timeout 10
+log_user 0
+
+set env(XDG_CONFIG_HOME) [lindex $argv 2]
+spawn -noecho sh -c {stty rows 24 columns 80; exec "$1" "$2"} benchmark [lindex $argv 0] [lindex $argv 1]
+expect "*loading source...*"
+send "\003"
+expect eof
+
+set result [wait]
+exit [lindex $result 3]

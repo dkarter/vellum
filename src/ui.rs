@@ -244,7 +244,7 @@ fn render_with_cursor_position(
     }
     footer.push(Span::styled(
         footer_text,
-        Style::new().fg(if app.status.is_some() {
+        Style::new().fg(if app.status_is_error() {
             Color::Red
         } else {
             color(&theme.border)

@@ -121,3 +121,15 @@ Vellum SHALL write all interactive terminal control and restoration bytes to std
 - GIVEN a running interactive palette
 - WHEN the user cancels
 - THEN stdout remains empty
+
+### Requirement: Render before configured sources finish
+
+Vellum SHALL make the interactive terminal responsive while the initial configured source loads.
+
+#### Scenario: Initial configured source loads in the background {#UI-014}
+
+- GIVEN an interactive palette backed by a slow configured source
+- WHEN Vellum starts
+- THEN it renders a loading state without waiting for the source
+- AND it replaces that state with the source items when loading completes
+- AND stdin and select-one invocations still load synchronously

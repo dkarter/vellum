@@ -158,3 +158,14 @@ when `source.stdin = true`.
 - WHEN Vellum loads the source
 - THEN each nonempty line becomes one item with matching `value`, `name`, and `path` fields
 - AND JSON arrays and NDJSON objects retain their structured fields
+
+### Requirement: Cancel background source processes
+
+On Unix, Vellum SHALL terminate and reap command-backed source process groups when their background workers are discarded. Source commands that deliberately leave Vellum's process group are unsupported.
+
+#### Scenario: Closing during source loading cleans up processes {#SRC-021}
+
+- GIVEN an interactive palette with a long-running command-backed source
+- WHEN Vellum closes or replaces that source worker before loading completes
+- THEN the source process group is terminated
+- AND Vellum reaps the source process before shutdown completes
