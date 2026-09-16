@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/dkarter/vellum/compare/v1.0.0...v1.0.1) (2026-09-16)
+
+
+### Performance Improvements
+
+* render while sources load ([#50](https://github.com/dkarter/vellum/issues/50)) ([ea958e1](https://github.com/dkarter/vellum/commit/ea958e1a7156e82d5daa6e83905178c449375e30))
+
 ## [1.0.0](https://github.com/dkarter/vellum/compare/v0.12.0...v1.0.0) (2026-09-15)
 
 
