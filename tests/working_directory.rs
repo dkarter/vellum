@@ -19,7 +19,7 @@ fn temp_directory(label: &str) -> PathBuf {
 }
 
 fn run_palette(palette: &Path, cwd: Option<&Path>) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_vellum"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_vlm"));
     command.arg(palette).arg("--select-1");
     if let Some(cwd) = cwd {
         command.env("VELLUM_TEST_CWD", cwd);

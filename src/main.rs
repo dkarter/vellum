@@ -117,7 +117,16 @@ fn main() -> Result<()> {
             .with_context(|| format!("failed to resolve palette {}", palette_path.display()))?
     };
     let palette_key = palette_identity(&palette_path);
-    let global_path = config_root.map(|root| root.join("config.toml"));
+    let global_path = config_root
+        .map(|root| root.join("config.toml"))
+        .map(|path| -> Result<PathBuf> {
+            if path.is_absolute() {
+                Ok(path)
+            } else {
+                Ok(env::current_dir()?.join(path))
+            }
+        })
+        .transpose()?;
     let global = match &global_path {
         Some(global_path) => match fs::read_to_string(global_path) {
             Ok(global) => Some(global),
@@ -129,14 +138,14 @@ fn main() -> Result<()> {
         },
         None => None,
     };
-    let global_path = match (global.as_ref(), global_path) {
+    let global_config_path = match (global.as_ref(), global_path.as_ref()) {
         (Some(_), Some(path)) => Some(
-            fs::canonicalize(&path)
+            fs::canonicalize(path)
                 .with_context(|| format!("failed to resolve {}", path.display()))?,
         ),
         _ => None,
     };
-    let global = global.as_deref().zip(global_path.as_deref());
+    let global = global.as_deref().zip(global_config_path.as_deref());
     let mut config = Config::parse_layered_files(global, (&palette, &palette_path))?;
     if let Some(enabled) = run_request.preview_enabled {
         config.preview.enabled = enabled;

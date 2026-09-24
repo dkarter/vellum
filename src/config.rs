@@ -675,6 +675,7 @@ impl Config {
                 .contains_key(KeyCode::Char('c'), KeyModifiers::CONTROL)
         {
             bail!("preview scroll bindings conflict with each other or Ctrl-C");
+        }
         if self.cwd.as_ref().is_some_and(|cwd| cwd.trim().is_empty()) {
             bail!("cwd cannot be empty");
         }
