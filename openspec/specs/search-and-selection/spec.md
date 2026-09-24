@@ -70,6 +70,15 @@ Vellum SHALL provide a dedicated filter mode whose configured choices narrow fuz
 - THEN only items whose configured source field exactly matches that choice remain visible
 - AND the configured all key or the active choice clears it while Escape exits filter mode without changing Vim mode
 
+#### Scenario: Palette starts in filter mode {#FIL-004}
+
+- GIVEN a palette with `input.start_mode = "filter"` and at least one filter choice
+- WHEN Vellum opens the palette
+- THEN filter mode is shown immediately and a choice key applies the exact-match predicate without first pressing the mode binding
+- AND Escape returns to insert editing mode without cancelling or clearing the active filter
+- AND fuzzy search continues to combine with the active filter after leaving filter mode
+- AND a palette with no choices remains in its editing mode even if startup in filter mode is requested
+
 #### Scenario: Filtered selection preserves accept behavior {#FIL-002}
 
 - GIVEN an active filter with a visible selected item and a configured default action

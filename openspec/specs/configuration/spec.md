@@ -103,3 +103,9 @@ Vellum SHALL allow global defaults and individual palettes to configure filter-m
 - GIVEN a global filter-mode binding and palette filter choices
 - WHEN Vellum parses the layered configuration
 - THEN the filter label and bindings and each choice's key, label, source field, value, icon, and color are retained
+
+#### Scenario: Palette selects filter startup mode {#CFG-012}
+
+- GIVEN global input defaults and a palette with `input.start_mode = "filter"`
+- WHEN Vellum parses the layered configuration
+- THEN the palette's filter startup mode overrides the global input start mode

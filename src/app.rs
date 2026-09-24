@@ -13,7 +13,7 @@ use crate::{
     action::{AvailabilityCommand, prepare_availability},
     config::{
         ActionsConfig, Bindings, FilterChoice, FilterConfig, InputConfig, InputMode, ItemConfig,
-        Keybindings, PreviewConfig,
+        Keybindings, PreviewConfig, StartMode,
     },
     frecency::FrecencyRank,
     item::{RenderedItem, field_value_at, matching_indices_with_frecency_by, render_items},
@@ -134,6 +134,8 @@ impl App {
         action_config: ActionsConfig,
     ) -> Self {
         let items = render_items(&source_items, &item_config, 0);
+        let filter_mode =
+            input_config.start_mode == StartMode::Filter && !filter_config.choices.is_empty();
         let mut app = Self {
             item_config,
             keybindings,
@@ -150,13 +152,13 @@ impl App {
             visible: Vec::new(),
             query: String::new(),
             cursor: 0,
-            input_mode: if input_config.vim {
-                input_config.start_mode
+            input_mode: if input_config.vim && input_config.start_mode == StartMode::Normal {
+                InputMode::Normal
             } else {
                 InputMode::Insert
             },
             input_config,
-            filter_mode: false,
+            filter_mode,
             action_menu: false,
             action_selected: 0,
             action_query: String::new(),
@@ -1381,6 +1383,76 @@ mod tests {
         app.handle_key(KeyEvent::from(KeyCode::Esc));
         assert_eq!(app.visible, [0]);
         assert_eq!(app.input_mode, InputMode::Normal);
+    }
+
+    #[test]
+    fn fil_004_palette_starts_in_filter_mode_and_restores_editing_mode() {
+        for vim in [true, false] {
+            let base = app();
+            let mut source = base.source_items;
+            source[0].insert("state".into(), "working".into());
+            source[1].insert("state".into(), "idle".into());
+            let filters = toml::from_str(
+                r#"
+                [[choices]]
+                key = "w"
+                label = "working"
+                source = "state"
+                value = "working"
+                "#,
+            )
+            .unwrap();
+            let input = InputConfig {
+                vim,
+                start_mode: StartMode::Filter,
+            };
+            let mut app = App::new(
+                source,
+                base.item_config,
+                base.keybindings,
+                filters,
+                input,
+                true,
+            );
+
+            assert!(app.filter_mode);
+            assert_eq!(app.input_mode, InputMode::Insert);
+            app.handle_key(KeyEvent::from(KeyCode::Char('w')));
+            assert_eq!(app.visible, [0]);
+            assert!(app.query.is_empty());
+            app.handle_key(KeyEvent::from(KeyCode::Esc));
+            assert!(!app.filter_mode);
+            assert_eq!(app.input_mode, InputMode::Insert);
+            assert_eq!(app.outcome, Outcome::Running);
+            app.handle_key(KeyEvent::from(KeyCode::Char('a')));
+            assert_eq!(app.query, "a");
+            assert_eq!(app.visible, [0]);
+            app.handle_key(KeyEvent::from(KeyCode::Esc));
+            if vim {
+                assert_eq!(app.outcome, Outcome::Running);
+                assert_eq!(app.input_mode, InputMode::Normal);
+            } else {
+                assert_eq!(app.outcome, Outcome::Cancelled);
+            }
+        }
+
+        let base = app();
+        let filters = FilterConfig::default();
+        let mut app = App::new(
+            base.source_items,
+            base.item_config,
+            base.keybindings,
+            filters,
+            InputConfig {
+                start_mode: StartMode::Filter,
+                ..InputConfig::default()
+            },
+            true,
+        );
+        assert!(!app.filter_mode);
+        app.handle_key(KeyEvent::from(KeyCode::Char('b')));
+        assert_eq!(app.query, "b");
+        assert_eq!(app.visible, [1]);
     }
 
     #[test]

@@ -439,14 +439,14 @@ impl<'de> Deserialize<'de> for Bindings {
 #[serde(default, deny_unknown_fields)]
 pub struct InputConfig {
     pub vim: bool,
-    pub start_mode: InputMode,
+    pub start_mode: StartMode,
 }
 
 impl Default for InputConfig {
     fn default() -> Self {
         Self {
             vim: true,
-            start_mode: InputMode::Insert,
+            start_mode: StartMode::Insert,
         }
     }
 }
@@ -457,6 +457,15 @@ pub enum InputMode {
     Normal,
     #[default]
     Insert,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StartMode {
+    Normal,
+    #[default]
+    Insert,
+    Filter,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -1032,7 +1041,7 @@ mod tests {
         assert_eq!(config.filters.label, "filter");
         assert!(config.filters.choices.is_empty());
         assert!(config.input.vim);
-        assert_eq!(config.input.start_mode, InputMode::Insert);
+        assert_eq!(config.input.start_mode, StartMode::Insert);
         assert_eq!(config.item.padding, 1);
         assert_eq!(config.item.spacing, 0);
         assert_eq!(config.item.alternate_background, None);
@@ -1138,10 +1147,19 @@ mod tests {
         let config = Config::parse_layered(Some(global), &palette).unwrap();
 
         assert_eq!(config.search.placeholder, "Palette");
-        assert_eq!(config.input.start_mode, InputMode::Normal);
+        assert_eq!(config.input.start_mode, StartMode::Normal);
         assert_eq!(config.keybindings.down.label(), "ctrl-j");
         assert_eq!(config.item.padding, 3);
         assert_eq!(config.item.spacing, 1);
+    }
+
+    #[test]
+    fn cfg_012_palette_can_select_filter_start_mode() {
+        let palette = format!("{MINIMAL}\n[input]\nstart_mode = 'filter'");
+        let config =
+            Config::parse_layered(Some("[input]\nstart_mode = 'normal'"), &palette).unwrap();
+
+        assert_eq!(config.input.start_mode, StartMode::Filter);
     }
 
     #[test]
