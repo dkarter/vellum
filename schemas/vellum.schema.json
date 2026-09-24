@@ -27,6 +27,7 @@
       "properties": {
         "enabled": { "type": "boolean", "default": false },
         "position": { "enum": ["left", "right", "top", "bottom"], "default": "right" },
+        "initial_scroll": { "description": "Where each new preview starts; scrolling remains available in both directions.", "enum": ["top", "bottom"], "default": "top" },
         "size": { "type": "integer", "minimum": 10, "maximum": 90, "default": 50 },
         "title": { "type": "string", "default": "Preview" },
         "border": { "description": "Pane chrome: separator on the edge facing results, a full box, or none.", "enum": ["separator", "full", "none"], "default": "separator" },

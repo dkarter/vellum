@@ -524,7 +524,10 @@ fn render_preview(frame: &mut Frame, app: &mut App, config: &Config, area: Rect)
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let mut content = inner;
-    if !config.preview.title.is_empty() && content.height > 1 {
+    let has_title = !config.preview.title.is_empty() && content.height > 1;
+    let preview_height = content.height.saturating_sub(u16::from(has_title));
+    app.set_preview_height(preview_height as usize);
+    if has_title {
         let heading = Line::from(vec![
             Span::styled(
                 " ◈ ",
@@ -546,7 +549,7 @@ fn render_preview(frame: &mut Frame, app: &mut App, config: &Config, area: Rect)
                 ..content
             },
         );
-        if content.width >= 28 && app.preview_lines.lines.len() > content.height as usize {
+        if content.width >= 28 && app.preview_lines.lines.len() > preview_height as usize {
             let percent = app.preview_offset.saturating_mul(100) / app.preview_max_offset().max(1);
             let indicator = format!(" {percent:>3}% ");
             frame.render_widget(
@@ -562,7 +565,6 @@ fn render_preview(frame: &mut Frame, app: &mut App, config: &Config, area: Rect)
         content.y += 1;
         content.height -= 1;
     }
-    app.set_preview_height(content.height as usize);
     if config.source.builtin == Some(crate::builtins::BuiltinSource::Themes) {
         render_theme_showcase(frame, content, app, theme);
         return;
@@ -588,12 +590,52 @@ fn render_preview(frame: &mut Frame, app: &mut App, config: &Config, area: Rect)
         frame.render_stateful_widget(scrollbar, scrollbar_area, &mut state);
         content.width -= 1;
     }
-    let start = app.preview_offset.min(count);
-    let end = start.saturating_add(content.height as usize).min(count);
-    frame.render_widget(
-        Paragraph::new(app.preview_lines.lines[start..end].to_vec()).style(base_style(theme)),
-        content,
-    );
+    frame.render_widget(Paragraph::new("").style(base_style(theme)), content);
+    for (row, line) in app.preview_lines.lines[app.preview_offset.min(count)..]
+        .iter()
+        .take(content.height as usize)
+        .enumerate()
+    {
+        render_preview_line(
+            frame,
+            line,
+            Rect {
+                y: content.y + row as u16,
+                height: 1,
+                ..content
+            },
+        );
+    }
+}
+
+/// Clip while traversing spans, so a long unbroken ANSI line never needs a
+/// full-width measurement (or a clone) on every redraw.
+fn render_preview_line(frame: &mut Frame, line: &Line<'_>, mut area: Rect) {
+    for span in &line.spans {
+        if area.width == 0 {
+            break;
+        }
+        let mut width = 0;
+        let mut end = 0;
+        let mut clipped = false;
+        for (index, grapheme) in span.content.grapheme_indices(true) {
+            let grapheme_width = Line::from(grapheme).width();
+            if width + grapheme_width > area.width as usize {
+                clipped = true;
+                break;
+            }
+            width += grapheme_width;
+            end = index + grapheme.len();
+        }
+        if end > 0 {
+            frame.render_widget(Span::styled(&span.content[..end], span.style), area);
+            area.x += width as u16;
+            area.width -= width as u16;
+        }
+        if clipped {
+            break;
+        }
+    }
 }
 
 fn render_theme_showcase(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
@@ -899,10 +941,122 @@ fn color(value: &str) -> Color {
 
 #[cfg(test)]
 mod tests {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use ratatui::{Terminal, backend::TestBackend};
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn ui_020_large_ansi_preview_starts_at_bottom_and_scrolls_normally() {
+        let config = Config::parse("[source]\ncmd='unused'\n[item]\ntemplate=[['$name']]\nvalue='$name'\n[preview]\nenabled=true\ninitial_scroll='bottom'\ncommand=['cat','$name']").unwrap();
+        let mut app = App::new(
+            vec![json!({"name":"One"}).as_object().unwrap().clone()],
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            true,
+        );
+        app.configure_preview(config.preview.clone());
+        let content = std::sync::Arc::new(crate::preview::parse_ansi(
+            &(0..3000)
+                .map(|i| format!("\u{1b}[31mrow-{i:04}\u{1b}[0m\n"))
+                .collect::<String>(),
+        ));
+        app.set_preview_content(content.clone());
+        let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        assert_eq!(app.preview_offset, app.preview_max_offset());
+        let buffer = terminal.backend().buffer();
+        assert!(
+            buffer
+                .content
+                .iter()
+                .any(|cell| cell.symbol() == "9" && cell.fg == Color::Indexed(1))
+        );
+        let rendered: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(rendered.contains("row-2999"));
+        assert!(!rendered.contains("row-0000"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+        assert!(app.preview_offset < app.preview_max_offset());
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let rendered: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(!rendered.contains("row-2999"));
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
+        assert_eq!(app.preview_offset, app.preview_max_offset());
+
+        app.set_preview_content(content); // cached result starts at its configured edge too
+        terminal.resize(Rect::new(0, 0, 80, 16)).unwrap();
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        assert_eq!(app.preview_offset, app.preview_max_offset());
+        let rendered: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(rendered.contains("row-2999"));
+
+        let mut default_config = config.clone();
+        default_config.preview.initial_scroll = Default::default();
+        app.configure_preview(default_config.preview);
+        app.set_preview_text("first\nlast".into());
+        assert_eq!(app.preview_offset, 0);
+    }
+
+    #[test]
+    fn ui_020_long_ansi_line_clips_to_the_viewport() {
+        let config = Config::parse("[source]\ncmd='unused'\n[item]\ntemplate=[['$name']]\nvalue='$name'\n[preview]\nenabled=true\ninitial_scroll='bottom'\ncommand=['true']").unwrap();
+        let mut app = App::new(
+            vec![json!({"name":"One"}).as_object().unwrap().clone()],
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            true,
+        );
+        app.configure_preview(config.preview.clone());
+        app.set_preview_text(format!("\u{1b}[31m{}\u{1b}[0m", "x".repeat(128 * 1024)));
+        let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let area = app.preview_area.unwrap();
+        assert_eq!(buffer[(area.x + 1, area.y + 1)].symbol(), "x");
+        assert_eq!(buffer[(area.x + 1, area.y + 1)].fg, Color::Indexed(1));
+        assert_eq!(buffer[(area.right() - 2, area.y + 1)].symbol(), "x");
+    }
+
+    #[test]
+    fn ui_020_wide_grapheme_does_not_reorder_later_ansi_spans() {
+        let mut terminal = Terminal::new(TestBackend::new(20, 1)).unwrap();
+        let line = Line::from(vec![
+            Span::raw(format!("{}界", "a".repeat(19))),
+            Span::styled("X", Style::new().fg(Color::Red)),
+        ]);
+        terminal
+            .draw(|frame| render_preview_line(frame, &line, Rect::new(0, 0, 20, 1)))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        assert_eq!(buffer[(18, 0)].symbol(), "a");
+        assert_eq!(buffer[(19, 0)].symbol(), " ");
+    }
 
     #[test]
     fn ui_018_preview_chrome_and_named_results_box_render() {

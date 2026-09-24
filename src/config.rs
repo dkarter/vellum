@@ -206,6 +206,7 @@ pub struct SearchConfig {
 pub struct PreviewConfig {
     pub enabled: bool,
     pub position: PreviewPosition,
+    pub initial_scroll: PreviewInitialScroll,
     pub size: u16,
     pub title: String,
     pub command: Option<Vec<String>>,
@@ -222,6 +223,7 @@ impl Default for PreviewConfig {
         Self {
             enabled: false,
             position: PreviewPosition::Right,
+            initial_scroll: PreviewInitialScroll::Top,
             size: 50,
             title: "Preview".into(),
             command: None,
@@ -241,6 +243,14 @@ pub enum PreviewPosition {
     Left,
     #[default]
     Right,
+    Top,
+    Bottom,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PreviewInitialScroll {
+    #[default]
     Top,
     Bottom,
 }

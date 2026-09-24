@@ -10,6 +10,14 @@ Render a compact responsive terminal interface that composes cleanly inside mult
 
 Vellum SHALL render ANSI-colored preview output, scroll it with configurable bindings, optionally show a scrollbar, and allow full, separator, or borderless preview chrome. Results MAY have a titled surrounding box.
 
+#### Scenario: New previews start at the configured edge {#UI-020}
+
+- GIVEN a preview configured with `initial_scroll = "bottom"` and ANSI output longer than the viewport
+- WHEN new or cached content arrives
+- THEN the last lines are visible immediately without rendering earlier lines
+- AND resizing clamps the viewport to the end, while keyboard and mouse scrolling can move up and down normally
+- AND the default `initial_scroll = "top"` starts new content at the beginning
+
 #### Scenario: Colored output and scrolling remain independent of selection {#UI-017}
 
 - GIVEN preview output with ANSI colors longer than the preview viewport
