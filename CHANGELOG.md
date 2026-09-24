@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0](https://github.com/dkarter/vellum/compare/v1.2.0...v1.3.0) (2026-09-24)
+
+
+### Features
+
+* **cli:** add usage-rs shell completions ([d156622](https://github.com/dkarter/vellum/commit/d156622953960ef748431e100866c29bd9721045))
+* **palettes:** set default start mode for agents palette to filter ([4a6fbd6](https://github.com/dkarter/vellum/commit/4a6fbd6915607873caa8871f127d909ad0a62592))
+
 ## [1.2.0](https://github.com/dkarter/vellum/compare/v1.1.0...v1.2.0) (2026-09-24)
 
 
