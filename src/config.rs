@@ -144,6 +144,8 @@ pub enum OnSuccess {
 #[serde(default, deny_unknown_fields)]
 pub struct FilterConfig {
     pub label: String,
+    pub all_label: String,
+    pub separator: String,
     pub mode: Bindings,
     pub clear: Bindings,
     pub choices: Vec<FilterChoice>,
@@ -153,6 +155,8 @@ impl Default for FilterConfig {
     fn default() -> Self {
         Self {
             label: "filter".into(),
+            all_label: "all".into(),
+            separator: "|".into(),
             mode: Bindings::new(["ctrl-g"]),
             clear: Bindings::new(["a"]),
             choices: Vec::new(),
@@ -730,6 +734,9 @@ impl Config {
         }
         if !self.filters.choices.is_empty() && self.filters.label.trim().is_empty() {
             bail!("filters.label cannot be empty when filter choices are configured");
+        }
+        if self.filters.all_label.trim().is_empty() {
+            bail!("filters.all_label cannot be empty");
         }
         let global_binding_conflicts = |bindings: &Bindings| {
             self.keybindings.enabled
@@ -1330,7 +1337,7 @@ mod tests {
 
     #[test]
     fn cfg_011_filter_configuration_parses_and_layers() {
-        let global = "[filters]\nlabel = 'state'\nmode = 'ctrl-x'\nclear = 'z'";
+        let global = "[filters]\nlabel = 'state'\nall_label = 'everything'\nseparator = '·'\nmode = 'ctrl-x'\nclear = 'z'";
         let palette = format!(
             "{MINIMAL}\n{}",
             r#"
@@ -1349,6 +1356,8 @@ mod tests {
         assert_eq!(config.filters.mode.label(), "ctrl-x");
         assert_eq!(config.filters.clear.label(), "z");
         assert_eq!(config.filters.label, "state");
+        assert_eq!(config.filters.all_label, "everything");
+        assert_eq!(config.filters.separator, "·");
         assert_eq!(config.filters.choices[0].key.label(), "w");
         assert_eq!(config.filters.choices[0].label, "working");
         assert_eq!(config.filters.choices[0].source, "agent_status");

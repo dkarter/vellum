@@ -87,6 +87,14 @@ fn sch_005_shared_schema_describes_palette_filters() {
         "filter"
     );
     assert_eq!(
+        shared["properties"]["filters"]["properties"]["all_label"]["default"],
+        "all"
+    );
+    assert_eq!(
+        shared["properties"]["filters"]["properties"]["separator"]["default"],
+        "|"
+    );
+    assert_eq!(
         shared["properties"]["filters"]["properties"]["mode"]["default"],
         "ctrl-g"
     );

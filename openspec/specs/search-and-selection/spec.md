@@ -69,6 +69,7 @@ Vellum SHALL provide a dedicated filter mode whose configured choices narrow fuz
 - WHEN the user enters filter mode and presses a choice key
 - THEN only items whose configured source field exactly matches that choice remain visible
 - AND the configured all key or the active choice clears it while Escape exits filter mode without changing Vim mode
+- AND Tab and Shift-Tab cycle forward and backward through all and the configured choices, wrapping at either end
 
 #### Scenario: Palette starts in filter mode {#FIL-004}
 

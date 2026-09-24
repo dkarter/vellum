@@ -109,6 +109,17 @@
           "minLength": 1,
           "default": "filter"
         },
+        "all_label": {
+          "description": "Expanded label for the all-items choice in filter mode.",
+          "type": "string",
+          "minLength": 1,
+          "default": "all"
+        },
+        "separator": {
+          "description": "Text between filter choices in the search border.",
+          "type": "string",
+          "default": "|"
+        },
         "mode": { "$ref": "#/$defs/bindings", "default": "ctrl-g" },
         "clear": { "$ref": "#/$defs/bindings", "default": "a" },
         "choices": {

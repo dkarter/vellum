@@ -14,6 +14,14 @@ mode = "ctrl-g"
 clear = "a"
 
 [[filters.choices]]
+key = "i"
+label = "idle"
+source = "agent_status"
+value = "idle"
+icon = "○"
+fg = "#a6e3a1"
+
+[[filters.choices]]
 key = "w"
 label = "working"
 source = "agent_status"
@@ -28,14 +36,6 @@ source = "agent_status"
 value = "done"
 icon = "●"
 fg = "#89b4fa"
-
-[[filters.choices]]
-key = "i"
-label = "idle"
-source = "agent_status"
-value = "idle"
-icon = "○"
-fg = "#a6e3a1"
 
 [[filters.choices]]
 key = "b"

@@ -140,13 +140,16 @@ Vellum SHALL redraw its interface when the terminal reports a new size.
 
 ### Requirement: Show filter controls and state
 
-Vellum SHALL style the active filter beside the search title and show compact filter controls in the footer.
+Vellum SHALL show a right-aligned filter strip in the search border cutout while filter mode is open, expand and color only the active choice, animate the highlight between choices, and show compact filter controls in the footer. Outside filter mode, Vellum SHALL show only the active choice, or no indicator when all items are shown.
 
 #### Scenario: Footer reflects filter state {#UI-009}
 
 - GIVEN a palette with configured filters
 - WHEN the normal and filter-mode frames are drawn
-- THEN the active choice's icon, label, and color appear beside the search title
+- THEN filter mode shows the configurable all label and every configured choice by its key, using the configured separator in the input border's muted color with one space around each default separator, expanding the active label with its color as a background highlight while inactive labels are uncolored
+- AND the all choice uses the theme's selection foreground and background together for legible text
+- AND switching choices slides the highlight to the new position
+- AND opening or closing filter mode animates between the full strip and the active-only indicator, or no indicator for all items
 - AND the footer identifies the filter binding outside filter mode and compactly lists the filter name and keys inside it
 
 ### Requirement: Separate terminal rendering from machine output

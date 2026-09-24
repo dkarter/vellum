@@ -3,7 +3,7 @@ use std::str::FromStr;
 use ratatui::{
     Frame, Terminal,
     backend::Backend,
-    layout::{Constraint, Layout, Rect},
+    layout::{Alignment as LayoutAlignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
@@ -124,30 +124,14 @@ fn render_with_cursor_position(
                 search_area.width.saturating_sub(2) as usize,
             )
         };
-        let title = if let Some(choice) = app.active_filter() {
-            let filter = if choice.icon.is_empty() {
-                choice.label.clone()
-            } else {
-                format!("{} {}", choice.icon, choice.label)
-            };
-            let mut style = Style::new().add_modifier(Modifier::BOLD);
-            if let Some(fg) = &choice.fg {
-                style = style.fg(color(fg));
-            }
-            Line::from(vec![
-                Span::raw(format!(" {}  ", config.search.title)),
-                Span::styled(filter, style),
-                Span::raw(" "),
-            ])
-        } else {
-            Line::from(format!(" {} ", config.search.title))
-        };
-        let input = Paragraph::new(query).style(base_style(theme)).block(
-            Block::new()
-                .borders(Borders::ALL)
-                .border_style(Style::new().fg(color(&theme.border)))
-                .title(title),
-        );
+        let mut block = Block::new()
+            .borders(Borders::ALL)
+            .border_style(Style::new().fg(color(&theme.border)))
+            .title(format!(" {} ", config.search.title));
+        if let Some(title) = filter_title(app, config) {
+            block = block.title(title.alignment(LayoutAlignment::Right));
+        }
+        let input = Paragraph::new(query).style(base_style(theme)).block(block);
         frame.render_widget(input, search_area);
         cursor_position = Some((search_area.x + 1 + cursor_offset, search_area.y + 1));
     }
@@ -238,11 +222,9 @@ fn render_with_cursor_position(
                 .map(|choice| choice.key.label()),
         );
         format!(
-            "{} {}  {}/{} navigate  esc close",
+            "{} {}  tab/shift-tab cycle  esc close",
             config.filters.label,
             keys.join("/"),
-            config.keybindings.display_binding(&config.keybindings.up),
-            config.keybindings.display_binding(&config.keybindings.down),
         )
     } else {
         let mut text = format!(
@@ -320,6 +302,150 @@ fn render_with_cursor_position(
         cursor_position = Some(position);
     }
     cursor_position
+}
+
+fn filter_title(app: &App, config: &Config) -> Option<Line<'static>> {
+    if config.filters.choices.is_empty() {
+        return None;
+    }
+
+    let theme = &config.theme;
+    let selected = app.active_filter_index();
+    let expansion = app.filter_expansion();
+    if selected.is_none() && expansion <= 0.0 {
+        return None;
+    }
+    let mut labels = Vec::with_capacity(config.filters.choices.len() + 1);
+    labels.push(if selected.is_none() {
+        config.filters.all_label.clone()
+    } else {
+        config.filters.clear.label().to_owned()
+    });
+    for (index, choice) in config.filters.choices.iter().enumerate() {
+        labels.push(if selected == Some(index) {
+            choice.label.clone()
+        } else {
+            choice.key.label().to_owned()
+        });
+    }
+
+    let (start, end) = app.filter_highlight();
+    let highlight_start = start.round() as usize;
+    let highlight_end = end.round() as usize;
+    let highlight = selected
+        .and_then(|index| config.filters.choices[index].fg.as_deref())
+        .map(color)
+        .unwrap_or_else(|| color(&theme.selection_background));
+    let foreground = color(&theme.foreground);
+    let background = color(&theme.background);
+    let text_on_highlight = if selected.is_none() {
+        color(&theme.selection_foreground)
+    } else {
+        background
+    };
+
+    let mut spans = Vec::new();
+    let mut cell = 0;
+    for (index, label) in labels.iter().enumerate() {
+        if index > 0 {
+            push_title_cells(
+                &mut spans,
+                &config.filters.separator,
+                &mut cell,
+                highlight_start..highlight_end,
+                highlight,
+                color(&theme.border),
+                text_on_highlight,
+            );
+        }
+        push_title_cells(
+            &mut spans,
+            &format!(" {label} "),
+            &mut cell,
+            highlight_start..highlight_end,
+            highlight,
+            foreground,
+            text_on_highlight,
+        );
+    }
+    let (choice_start, choice_end) = app.filter_bounds(selected, selected);
+    let choice_start = choice_start as usize;
+    let choice_end = choice_end as usize;
+    let visible = if selected.is_none() {
+        let keep = (cell as f32 * expansion).round() as usize;
+        cell.saturating_sub(keep)..cell
+    } else {
+        0..cell
+    };
+    let ranges = if selected.is_none() {
+        vec![visible]
+    } else {
+        let before = (choice_start as f32 * expansion).round() as usize;
+        let after = ((cell - choice_end) as f32 * expansion).round() as usize;
+        vec![
+            choice_start - before..choice_start,
+            choice_start..choice_end,
+            choice_end..choice_end + after,
+        ]
+    };
+    let clipped = clip_filter_spans(spans, &ranges);
+    Some(Line::from(clipped))
+}
+
+fn clip_filter_spans(
+    spans: Vec<Span<'static>>,
+    ranges: &[std::ops::Range<usize>],
+) -> Vec<Span<'static>> {
+    let mut clipped: Vec<Span<'static>> = Vec::new();
+    let mut offset = 0;
+    for span in spans {
+        for grapheme in span.content.graphemes(true) {
+            let width = Line::from(grapheme).width();
+            if ranges
+                .iter()
+                .any(|range| offset >= range.start && offset + width <= range.end)
+            {
+                if let Some(last) = clipped.last_mut()
+                    && last.style == span.style
+                {
+                    last.content.to_mut().push_str(grapheme);
+                } else {
+                    clipped.push(Span::styled(grapheme.to_owned(), span.style));
+                }
+            }
+            offset += width;
+        }
+    }
+    clipped
+}
+
+fn push_title_cells(
+    spans: &mut Vec<Span<'static>>,
+    text: &str,
+    offset: &mut usize,
+    highlight: std::ops::Range<usize>,
+    background: Color,
+    foreground: Color,
+    text_on_highlight: Color,
+) {
+    for grapheme in text.graphemes(true) {
+        let width = Line::from(grapheme).width();
+        let mut style = Style::new().fg(foreground);
+        if *offset < highlight.end && *offset + width > highlight.start {
+            style = style
+                .bg(background)
+                .fg(text_on_highlight)
+                .add_modifier(Modifier::BOLD);
+        }
+        if let Some(last) = spans.last_mut()
+            && last.style == style
+        {
+            last.content.to_mut().push_str(grapheme);
+        } else {
+            spans.push(Span::styled(grapheme.to_owned(), style));
+        }
+        *offset += width;
+    }
 }
 
 fn render_preview(frame: &mut Frame, app: &mut App, config: &Config, area: Rect) {
@@ -1191,15 +1317,22 @@ mod tests {
     #[test]
     fn ui_009_footer_reflects_filter_state() {
         let config = Config::parse(
-            r#"
+            r##"
                 [search]
                 title = "Agents"
 
                 [source]
                 cmd = "unused"
 
+                [theme]
+                background = "#1a1b26"
+                selection_background = "#283457"
+                selection_foreground = "#c0caf5"
+
                 [filters]
                 label = "state"
+                all_label = "everyone"
+                separator = "·"
                 mode = "ctrl-g"
 
                 [[filters.choices]]
@@ -1213,7 +1346,7 @@ mod tests {
                 [item]
                 template = [["$name"]]
                 value = "$id"
-            "#,
+            "##,
         )
         .unwrap();
         let source = json!([{ "id": "1", "name": "OpenCode", "state": "working" }]);
@@ -1243,57 +1376,109 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect();
         assert!(output.contains("ctrl-g state"));
+        assert!(!output.contains("everyone"), "{output}");
+
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('g'),
+            crossterm::event::KeyModifiers::CONTROL,
+        ));
+        app.settle_filter_animation();
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(output.contains("everyone · w"), "{output}");
+        let all = (0..80)
+            .map(|x| &terminal.backend().buffer()[(x, 0)])
+            .find(|cell| {
+                cell.symbol() == "e" && cell.bg == color(&config.theme.selection_background)
+            })
+            .unwrap();
+        assert_eq!(all.fg, color(&config.theme.selection_foreground));
+        let separator = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .find(|cell| cell.symbol() == "·")
+            .unwrap();
+        assert_eq!(separator.fg, color(&config.theme.border));
+        let inactive = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .find(|cell| cell.symbol() == "w")
+            .unwrap();
+        assert_eq!(inactive.fg, color(&config.theme.foreground));
+
+        app.handle_key(crossterm::event::KeyEvent::from(
+            crossterm::event::KeyCode::Char('w'),
+        ));
+        app.settle_filter_animation();
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(output.contains("a · working"), "{output}");
+        assert_eq!(terminal.backend().buffer()[(75, 0)].bg, Color::Blue);
+        assert!(app.animation_interval().is_none());
+
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('g'),
+            crossterm::event::KeyModifiers::CONTROL,
+        ));
+        assert!(app.animation_interval().is_some());
+        app.settle_filter_animation();
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(!output.contains("FILTER"));
+        assert!(output.contains("working"));
+        assert!(!output.contains("·"));
+        assert_eq!(terminal.backend().buffer()[(75, 0)].bg, Color::Blue);
 
         app.handle_key(crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('g'),
             crossterm::event::KeyModifiers::CONTROL,
         ));
         app.handle_key(crossterm::event::KeyEvent::from(
-            crossterm::event::KeyCode::Char('w'),
+            crossterm::event::KeyCode::Char('a'),
         ));
         app.handle_key(crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('g'),
             crossterm::event::KeyModifiers::CONTROL,
         ));
+        app.settle_filter_animation();
         terminal
             .draw(|frame| render(frame, &mut app, &config))
             .unwrap();
-        let output: String = terminal
-            .backend()
-            .buffer()
-            .content
-            .iter()
-            .map(|cell| cell.symbol())
+        let top: String = (0..80)
+            .map(|x| terminal.backend().buffer()[(x, 0)].symbol())
             .collect();
-        assert!(output.contains("Agents  ● working"), "{output}");
-        assert_eq!(
-            terminal
-                .backend()
-                .buffer()
-                .content
-                .iter()
-                .find(|cell| cell.symbol() == "●")
-                .unwrap()
-                .fg,
-            Color::Blue
+        assert!(
+            !top.contains("everyone") && !top.contains("working"),
+            "{top}"
         );
-
-        app.handle_key(crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::Char('g'),
-            crossterm::event::KeyModifiers::CONTROL,
-        ));
-        terminal
-            .draw(|frame| render(frame, &mut app, &config))
-            .unwrap();
-        let output: String = terminal
-            .backend()
-            .buffer()
-            .content
-            .iter()
-            .map(|cell| cell.symbol())
-            .collect();
-        assert!(output.contains("FILTER"));
-        assert!(output.contains("state a/w"));
     }
 
     #[test]

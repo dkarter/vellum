@@ -6,7 +6,7 @@ use std::{
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use nucleo_matcher::{Config as MatcherConfig, Matcher, Utf32Str, pattern::Pattern};
-use ratatui::text::Text;
+use ratatui::text::{Line, Text};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
@@ -69,6 +69,8 @@ pub struct App {
     pub status: Option<String>,
     status_is_error: bool,
     active_filter: Option<usize>,
+    filter_transition: Option<((f32, f32), Instant)>,
+    filter_mode_transition: Option<(f32, Instant)>,
     list_page_size: usize,
     pub selected: usize,
     pub preview_lines: Arc<Text<'static>>,
@@ -166,6 +168,8 @@ impl App {
             status: None,
             status_is_error: false,
             active_filter: None,
+            filter_transition: None,
+            filter_mode_transition: None,
             list_page_size: 1,
             selected: 0,
             preview_lines: Arc::new(Text::default()),
@@ -241,7 +245,18 @@ impl App {
         }
         if self.filter_mode {
             if key.code == KeyCode::Esc || self.filter_config.mode.matches(key) {
-                self.filter_mode = false;
+                self.set_filter_mode(false);
+            } else if key.code == KeyCode::Tab || key.code == KeyCode::BackTab {
+                let count = self.filter_config.choices.len() + 1;
+                let position = self.active_filter.map_or(0, |index| index + 1);
+                let next = if key.code == KeyCode::BackTab
+                    || key.modifiers.contains(KeyModifiers::SHIFT)
+                {
+                    (position + count - 1) % count
+                } else {
+                    (position + 1) % count
+                };
+                self.set_filter(next.checked_sub(1));
             } else if self.bindings_match(key, &self.keybindings.page_down) {
                 self.move_page_down();
             } else if self.bindings_match(key, &self.keybindings.page_up) {
@@ -251,19 +266,16 @@ impl App {
             } else if self.bindings_match(key, &self.keybindings.up) {
                 self.move_up();
             } else if self.filter_config.clear.matches(key) {
-                if self.active_filter.take().is_some() {
-                    self.refilter();
-                }
+                self.set_filter(None);
             } else if let Some(index) = self
                 .filter_config
                 .choices
                 .iter()
                 .position(|choice| choice.key.matches(key))
             {
-                self.active_filter = (self.active_filter != Some(index)).then_some(index);
-                self.refilter();
+                self.set_filter((self.active_filter != Some(index)).then_some(index));
             } else if self.bindings_match(key, &self.keybindings.accept) {
-                self.filter_mode = false;
+                self.set_filter_mode(false);
                 self.accept_selected();
             }
             return;
@@ -283,7 +295,7 @@ impl App {
             return;
         }
         if !self.filter_config.choices.is_empty() && self.filter_config.mode.matches(key) {
-            self.filter_mode = true;
+            self.set_filter_mode(true);
             return;
         }
         if key.code == KeyCode::Esc && self.input_config.vim {
@@ -392,12 +404,27 @@ impl App {
     }
 
     pub fn tick(&mut self, elapsed_ms: u64) {
-        self.items = render_items(&self.source_items, &self.item_config, elapsed_ms);
-        self.visible = self.matching_indices();
-        self.clamp_selection();
+        if self.item_animation_interval().is_some() {
+            self.items = render_items(&self.source_items, &self.item_config, elapsed_ms);
+            self.visible = self.matching_indices();
+            self.clamp_selection();
+        }
+        self.finish_filter_transition();
     }
 
     pub fn animation_interval(&self) -> Option<std::time::Duration> {
+        let item = self.item_animation_interval();
+        if self.filter_transition.is_some() || self.filter_mode_transition.is_some() {
+            Some(
+                item.unwrap_or(Duration::from_millis(16))
+                    .min(Duration::from_millis(16)),
+            )
+        } else {
+            item
+        }
+    }
+
+    pub fn item_animation_interval(&self) -> Option<Duration> {
         self.item_config
             .tokens
             .iter()
@@ -621,6 +648,112 @@ impl App {
     pub fn active_filter(&self) -> Option<&FilterChoice> {
         self.active_filter
             .and_then(|index| self.filter_config.choices.get(index))
+    }
+
+    pub(crate) fn active_filter_index(&self) -> Option<usize> {
+        self.active_filter
+    }
+
+    fn set_filter(&mut self, next: Option<usize>) {
+        if self.active_filter == next {
+            return;
+        }
+        self.filter_transition = Some((self.filter_highlight(), Instant::now()));
+        self.active_filter = next;
+        self.refilter();
+    }
+
+    fn set_filter_mode(&mut self, mode: bool) {
+        if self.filter_mode != mode {
+            let expansion = self.filter_expansion();
+            self.filter_mode = mode;
+            self.filter_mode_transition = Some((expansion, Instant::now()));
+        }
+    }
+
+    pub(crate) fn filter_expansion(&self) -> f32 {
+        let destination = if self.filter_mode { 1.0 } else { 0.0 };
+        if let Some((origin, start)) = self.filter_mode_transition {
+            let progress = (start.elapsed().as_secs_f32() / 0.22).min(1.0);
+            origin + (destination - origin) * progress
+        } else {
+            destination
+        }
+    }
+
+    pub(crate) fn filter_highlight(&self) -> (f32, f32) {
+        let destination = self.filter_bounds(self.active_filter, self.active_filter);
+        if let Some((origin, _)) = self.filter_transition {
+            let eased = 1.0 - (1.0 - self.filter_progress()).powi(3);
+            (
+                origin.0 + (destination.0 - origin.0) * eased,
+                origin.1 + (destination.1 - origin.1) * eased,
+            )
+        } else {
+            destination
+        }
+    }
+
+    pub(crate) fn filter_bounds(
+        &self,
+        target: Option<usize>,
+        selected: Option<usize>,
+    ) -> (f32, f32) {
+        let mut offset = 0;
+        for slot in 0..=self.filter_config.choices.len() {
+            if slot > 0 {
+                offset += Line::from(self.filter_config.separator.as_str()).width();
+            }
+            let label = if slot == 0 {
+                if selected.is_none() {
+                    &self.filter_config.all_label
+                } else {
+                    self.filter_config.clear.label()
+                }
+            } else {
+                let choice = &self.filter_config.choices[slot - 1];
+                if selected == Some(slot - 1) {
+                    &choice.label
+                } else {
+                    choice.key.label()
+                }
+            };
+            let width = Line::from(label).width() + 2;
+            if slot == target.map_or(0, |index| index + 1) {
+                return (offset as f32, (offset + width) as f32);
+            }
+            offset += width;
+        }
+        unreachable!("filter slot is in range")
+    }
+
+    fn filter_progress(&self) -> f32 {
+        self.filter_transition
+            .map_or(1.0, |(_, start)| start.elapsed().as_secs_f32() / 0.22)
+            .min(1.0)
+    }
+
+    pub fn finish_filter_transition(&mut self) {
+        if self.filter_progress() >= 1.0 {
+            self.filter_transition = None;
+        }
+        if self
+            .filter_mode_transition
+            .is_some_and(|(_, start)| start.elapsed() >= Duration::from_millis(220))
+        {
+            self.filter_mode_transition = None;
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn settle_filter_animation(&mut self) {
+        if let Some((_, start)) = &mut self.filter_transition {
+            *start = Instant::now() - Duration::from_millis(230);
+        }
+        if let Some((_, start)) = &mut self.filter_mode_transition {
+            *start = Instant::now() - Duration::from_millis(230);
+        }
+        self.finish_filter_transition();
     }
 
     pub(crate) fn set_list_page_size(&mut self, page_size: usize) {
@@ -1383,6 +1516,84 @@ mod tests {
         app.handle_key(KeyEvent::from(KeyCode::Esc));
         assert_eq!(app.visible, [0]);
         assert_eq!(app.input_mode, InputMode::Normal);
+    }
+
+    #[test]
+    fn fil_001_tab_cycles_filter_choices_in_both_directions() {
+        let mut app = app();
+        app.source_items[0].insert("state".into(), "working".into());
+        app.source_items[1].insert("state".into(), "idle".into());
+        app.filter_config = toml::from_str(
+            r#"
+            [[choices]]
+            key = "w"
+            label = "working"
+            source = "state"
+            value = "working"
+
+            [[choices]]
+            key = "i"
+            label = "idle"
+            source = "state"
+            value = "idle"
+            "#,
+        )
+        .unwrap();
+        app.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::from(KeyCode::Tab));
+        assert_eq!(app.active_filter().unwrap().label, "working");
+        assert_eq!(app.visible, [0]);
+        app.handle_key(KeyEvent::from(KeyCode::Tab));
+        assert_eq!(app.active_filter().unwrap().label, "idle");
+        assert_eq!(app.visible, [1]);
+        app.handle_key(KeyEvent::from(KeyCode::Tab));
+        assert!(app.active_filter().is_none());
+        assert_eq!(app.visible, [0, 1]);
+        app.handle_key(KeyEvent::from(KeyCode::BackTab));
+        assert_eq!(app.active_filter().unwrap().label, "idle");
+        app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT));
+        assert_eq!(app.active_filter().unwrap().label, "working");
+    }
+
+    #[test]
+    fn ui_009_filter_highlight_slides_from_current_position_on_rapid_changes() {
+        let mut app = app();
+        app.filter_config = toml::from_str(
+            r#"
+            [[choices]]
+            key = "w"
+            label = "working"
+            source = "state"
+            value = "working"
+
+            [[choices]]
+            key = "i"
+            label = "idle"
+            source = "state"
+            value = "idle"
+            "#,
+        )
+        .unwrap();
+        let initial = app.filter_highlight();
+        app.set_filter(Some(0));
+        assert_eq!(app.filter_highlight().0.round(), initial.0);
+        app.filter_transition.as_mut().unwrap().1 = Instant::now() - Duration::from_millis(110);
+        let halfway = app.filter_highlight();
+        assert!(halfway.0 > initial.0);
+        app.set_filter(Some(1));
+        assert!((app.filter_highlight().0 - halfway.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn ui_009_filter_strip_reverses_animation_without_jumping() {
+        let mut app = app();
+        app.set_filter_mode(true);
+        app.filter_mode_transition.as_mut().unwrap().1 =
+            Instant::now() - Duration::from_millis(110);
+        let halfway = app.filter_expansion();
+        assert!(halfway > 0.0 && halfway < 1.0);
+        app.set_filter_mode(false);
+        assert!((app.filter_expansion() - halfway).abs() < 0.02);
     }
 
     #[test]

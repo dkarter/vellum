@@ -96,13 +96,13 @@ Vellum SHALL allow global defaults and individual palettes to configure the titl
 
 ### Requirement: Configure palette filters
 
-Vellum SHALL allow global defaults and individual palettes to configure filter-mode and all-items bindings, a filter label, and ordered exact-match choices with optional presentation metadata.
+Vellum SHALL allow global defaults and individual palettes to configure filter-mode and all-items bindings, an all-items label (default "all"), a separator (default "|"), a filter label, and ordered exact-match choices with optional presentation metadata.
 
 #### Scenario: Filter configuration parses and layers {#CFG-011}
 
 - GIVEN a global filter-mode binding and palette filter choices
 - WHEN Vellum parses the layered configuration
-- THEN the filter label and bindings and each choice's key, label, source field, value, icon, and color are retained
+- THEN the filter label, all-items label, separator, and bindings and each choice's key, label, source field, value, icon, and color are retained
 
 ### Requirement: Configure the palette working directory
 

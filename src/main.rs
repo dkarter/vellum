@@ -364,12 +364,12 @@ fn run(
 ) -> Result<Outcome> {
     let started = Instant::now();
     let mut last_animation = Instant::now();
+    let mut last_item_animation = Instant::now();
     let mut last_refresh = Instant::now();
     let mut refresh_result = initial_source;
     let mut initial_source_pending = refresh_result.is_some();
     let mut availability_results: Vec<Receiver<(action::AvailabilityCommand, bool)>> = Vec::new();
     let refresh_interval = Duration::from_millis(config.source.refresh_ms);
-    let animation_interval = app.animation_interval();
     let mut dirty = true;
     let mut cursor_mode = None;
     let mut previews = preview::Controller::default();
@@ -402,7 +402,7 @@ fn run(
 
         let timeout = if app.outcome == Outcome::Running {
             next_timeout(
-                animation_interval,
+                app.animation_interval(),
                 last_animation,
                 refresh_interval,
                 last_refresh,
@@ -450,8 +450,19 @@ fn run(
         }
 
         let elapsed_ms = started.elapsed().as_millis() as u64;
-        if animation_interval.is_some_and(|interval| last_animation.elapsed() >= interval) {
-            app.tick(elapsed_ms);
+        if app
+            .animation_interval()
+            .is_some_and(|interval| last_animation.elapsed() >= interval)
+        {
+            if app
+                .item_animation_interval()
+                .is_some_and(|interval| last_item_animation.elapsed() >= interval)
+            {
+                app.tick(elapsed_ms);
+                last_item_animation = Instant::now();
+            } else {
+                app.finish_filter_transition();
+            }
             last_animation = Instant::now();
             dirty = true;
         }

@@ -296,20 +296,20 @@ mod tests {
                 .map(|choice| (choice.key.label(), choice.value.as_str()))
                 .collect::<Vec<_>>(),
             [
+                ("i", "idle"),
                 ("w", "working"),
                 ("d", "done"),
-                ("i", "idle"),
                 ("b", "blocked"),
                 ("u", "unknown"),
             ]
         );
-        assert_eq!(config.filters.choices[0].icon, "●");
-        assert_eq!(config.filters.choices[0].fg.as_deref(), Some("yellow"));
+        assert_eq!(config.filters.choices[0].icon, "○");
+        assert_eq!(config.filters.choices[0].fg.as_deref(), Some("#a6e3a1"));
         assert_eq!(config.filters.choices[1].icon, "●");
-        assert_eq!(config.filters.choices[1].fg.as_deref(), Some("#89b4fa"));
-        assert_eq!(config.filters.choices[2].fg.as_deref(), Some("#a6e3a1"));
+        assert_eq!(config.filters.choices[1].fg.as_deref(), Some("yellow"));
+        assert_eq!(config.filters.choices[2].fg.as_deref(), Some("#89b4fa"));
         assert_eq!(config.filters.choices[3].fg.as_deref(), Some("#ff6188"));
-        assert_eq!(config.filters.choices[2].icon, "○");
+        assert_eq!(config.filters.choices[2].icon, "●");
         assert_eq!(config.filters.choices[4].icon, "·");
         assert_eq!(config.filters.choices[4].fg.as_deref(), Some("#999999"));
         let item = representative_item("herdr-agents");
@@ -343,7 +343,7 @@ mod tests {
         );
         assert_eq!(
             representative_item("herdr-workspaces")["agent_status"],
-            workspace.filters.choices[0].value
+            workspace.filters.choices[1].value
         );
         let item = representative_item("herdr-workspaces");
         assert!(
