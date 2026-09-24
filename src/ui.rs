@@ -207,62 +207,7 @@ fn render_with_cursor_position(
     let mut state = ListState::default().with_selected(selected_list_index);
     frame.render_stateful_widget(list, list_area, &mut state);
 
-    let footer_text = if let Some(status) = &app.status {
-        status.clone()
-    } else if app.filter_mode {
-        let mut keys = Vec::with_capacity(config.filters.choices.len() + 1);
-        if !config.filters.clear.is_empty() {
-            keys.push(config.filters.clear.label());
-        }
-        keys.extend(
-            config
-                .filters
-                .choices
-                .iter()
-                .map(|choice| choice.key.label()),
-        );
-        format!(
-            "{} {}  tab/shift-tab cycle  esc close",
-            config.filters.label,
-            keys.join("/"),
-        )
-    } else {
-        let mut text = format!(
-            "{}/{}  {}/{} navigate  {} select  {} cancel",
-            app.visible.len(),
-            app.items.len(),
-            config.keybindings.display_binding(&config.keybindings.up),
-            config.keybindings.display_binding(&config.keybindings.down),
-            config
-                .keybindings
-                .display_binding(&config.keybindings.accept),
-            config
-                .keybindings
-                .display_binding(&config.keybindings.cancel),
-        );
-        if !config.filters.choices.is_empty() {
-            text.push_str(&format!(
-                "  {} {}",
-                config.filters.mode.label(),
-                config.filters.label
-            ));
-        }
-        if config.keybindings.enabled
-            && app.has_potential_actions()
-            && !config.actions.menu.is_empty()
-        {
-            text.push_str(&format!("  {} actions", config.actions.menu.label()));
-        }
-        if app.preview_visible {
-            text.push_str(&format!(
-                "  {}/{} preview",
-                config.preview.scroll_up.label(),
-                config.preview.scroll_down.label()
-            ));
-        }
-        text
-    };
-    let mut footer = Vec::with_capacity(3);
+    let mut footer = Vec::new();
     if app.filter_mode {
         footer.push(Span::styled(
             " FILTER ",
@@ -286,14 +231,105 @@ fn render_with_cursor_position(
         ));
         footer.push(Span::raw(" "));
     }
-    footer.push(Span::styled(
-        footer_text,
-        Style::new().fg(if app.status_is_error() {
-            Color::Red
-        } else {
-            color(&theme.border)
-        }),
-    ));
+    if let Some(status) = &app.status {
+        footer.push(Span::styled(
+            status.clone(),
+            Style::new().fg(if app.status_is_error() {
+                Color::Red
+            } else {
+                color(&theme.border)
+            }),
+        ));
+    } else if app.filter_mode {
+        let mut keys = Vec::with_capacity(config.filters.choices.len() + 1);
+        if !config.filters.clear.is_empty() {
+            keys.push(config.filters.clear.label());
+        }
+        keys.extend(
+            config
+                .filters
+                .choices
+                .iter()
+                .map(|choice| choice.key.label()),
+        );
+        push_footer_hint(
+            &mut footer,
+            "",
+            keys.join("/"),
+            &config.filters.label,
+            theme,
+        );
+        push_footer_hint(&mut footer, "  ", "tab/shift-tab", "cycle", theme);
+        push_footer_hint(&mut footer, "  ", "esc", "close", theme);
+    } else {
+        footer.push(Span::styled(
+            format!("{}/{}", app.visible.len(), app.items.len()),
+            Style::new().fg(color(&theme.border)),
+        ));
+        push_footer_hint(
+            &mut footer,
+            "  ",
+            format!(
+                "{}/{}",
+                config.keybindings.display_binding(&config.keybindings.up),
+                config.keybindings.display_binding(&config.keybindings.down),
+            ),
+            "navigate",
+            theme,
+        );
+        push_footer_hint(
+            &mut footer,
+            "  ",
+            config
+                .keybindings
+                .display_binding(&config.keybindings.accept),
+            "select",
+            theme,
+        );
+        push_footer_hint(
+            &mut footer,
+            "  ",
+            config
+                .keybindings
+                .display_binding(&config.keybindings.cancel),
+            "cancel",
+            theme,
+        );
+        if !config.filters.choices.is_empty() {
+            push_footer_hint(
+                &mut footer,
+                "  ",
+                config.filters.mode.label(),
+                &config.filters.label,
+                theme,
+            );
+        }
+        if config.keybindings.enabled
+            && app.has_potential_actions()
+            && !config.actions.menu.is_empty()
+        {
+            push_footer_hint(
+                &mut footer,
+                "  ",
+                config.actions.menu.label(),
+                "actions",
+                theme,
+            );
+        }
+        if app.preview_visible {
+            push_footer_hint(
+                &mut footer,
+                "  ",
+                format!(
+                    "{}/{}",
+                    config.preview.scroll_up.label(),
+                    config.preview.scroll_down.label(),
+                ),
+                "preview",
+                theme,
+            );
+        }
+    }
     frame.render_widget(Paragraph::new(Line::from(footer)), footer_area);
 
     if app.action_menu
@@ -302,6 +338,24 @@ fn render_with_cursor_position(
         cursor_position = Some(position);
     }
     cursor_position
+}
+
+fn push_footer_hint(
+    spans: &mut Vec<Span<'static>>,
+    separator: &'static str,
+    keys: impl Into<String>,
+    label: &str,
+    theme: &Theme,
+) {
+    spans.push(Span::raw(separator));
+    spans.push(Span::styled(
+        keys.into(),
+        Style::new().fg(color(&theme.foreground)),
+    ));
+    spans.push(Span::styled(
+        format!(" {label}"),
+        Style::new().fg(color(&theme.border)),
+    ));
 }
 
 fn filter_title(app: &App, config: &Config) -> Option<Line<'static>> {
@@ -364,7 +418,11 @@ fn filter_title(app: &App, config: &Config) -> Option<Line<'static>> {
             &mut cell,
             highlight_start..highlight_end,
             highlight,
-            foreground,
+            if app.filter_has_items(index.checked_sub(1)) {
+                foreground
+            } else {
+                color(&theme.border)
+            },
             text_on_highlight,
         );
     }
@@ -1376,6 +1434,18 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect();
         assert!(output.contains("ctrl-g state"));
+        let footer_text: String = (0..80)
+            .map(|x| terminal.backend().buffer()[(x, 5)].symbol())
+            .collect();
+        let hint = footer_text.find("ctrl-g state").unwrap();
+        assert_eq!(
+            terminal.backend().buffer()[(hint as u16, 5)].fg,
+            color(&config.theme.foreground)
+        );
+        assert_eq!(
+            terminal.backend().buffer()[((hint + 7) as u16, 5)].fg,
+            color(&config.theme.border)
+        );
         assert!(!output.contains("everyone"), "{output}");
 
         app.handle_key(crossterm::event::KeyEvent::new(
@@ -1394,6 +1464,15 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect();
         assert!(output.contains("everyone · w"), "{output}");
+        assert!(output.contains("a/w state"), "{output}");
+        assert_eq!(
+            terminal.backend().buffer()[(9, 5)].fg,
+            color(&config.theme.foreground)
+        );
+        assert_eq!(
+            terminal.backend().buffer()[(13, 5)].fg,
+            color(&config.theme.border)
+        );
         let all = (0..80)
             .map(|x| &terminal.backend().buffer()[(x, 0)])
             .find(|cell| {
@@ -1479,6 +1558,160 @@ mod tests {
             !top.contains("everyone") && !top.contains("working"),
             "{top}"
         );
+    }
+
+    #[test]
+    fn ui_009_filter_availability_updates_with_live_source_and_query() {
+        let config = Config::parse(
+            r#"
+                [source]
+                cmd = "unused"
+
+                [input]
+                start_mode = "filter"
+
+                [[filters.choices]]
+                key = "w"
+                label = "working"
+                source = "state"
+                value = "working"
+
+                [[filters.choices]]
+                key = "i"
+                label = "idle"
+                source = "$state"
+                value = "idle"
+
+                [item]
+                template = [["$name"]]
+                value = "$name"
+            "#,
+        )
+        .unwrap();
+        let item = |state: &str| {
+            json!({"name": state, "state": state})
+                .as_object()
+                .unwrap()
+                .clone()
+        };
+        let mut app = App::new(
+            vec![item("working")],
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            true,
+        );
+        let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
+        let choice = |symbol: &str, terminal: &Terminal<TestBackend>| {
+            (0..60)
+                .map(|x| &terminal.backend().buffer()[(x, 0)])
+                .find(|cell| cell.symbol() == symbol)
+                .unwrap()
+                .clone()
+        };
+
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        assert_eq!(choice("w", &terminal).fg, color(&config.theme.foreground));
+        assert_eq!(choice("i", &terminal).fg, color(&config.theme.border));
+
+        app.handle_key(crossterm::event::KeyEvent::from(
+            crossterm::event::KeyCode::Char('w'),
+        ));
+        app.settle_filter_animation();
+        let highlight = color(&config.theme.selection_background);
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        assert_eq!(choice("w", &terminal).bg, highlight);
+
+        assert!(app.replace_source(vec![item("idle")], 0));
+        assert!(app.visible.is_empty());
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        assert_eq!(choice("w", &terminal).bg, highlight);
+        assert_eq!(choice("i", &terminal).fg, color(&config.theme.foreground));
+
+        app.handle_key(crossterm::event::KeyEvent::from(
+            crossterm::event::KeyCode::Char('a'),
+        ));
+        app.settle_filter_animation();
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        assert_eq!(choice("w", &terminal).fg, color(&config.theme.border));
+        assert_eq!(choice("i", &terminal).fg, color(&config.theme.foreground));
+
+        assert!(app.replace_source(vec![item("working"), item("idle")], 0));
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('g'),
+            crossterm::event::KeyModifiers::CONTROL,
+        ));
+        for character in "idle".chars() {
+            app.handle_key(crossterm::event::KeyEvent::from(
+                crossterm::event::KeyCode::Char(character),
+            ));
+        }
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('g'),
+            crossterm::event::KeyModifiers::CONTROL,
+        ));
+        app.settle_filter_animation();
+        assert_eq!(app.visible.len(), 1);
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        assert_eq!(choice("w", &terminal).fg, color(&config.theme.border));
+        assert_eq!(choice("i", &terminal).fg, color(&config.theme.foreground));
+
+        app.handle_key(crossterm::event::KeyEvent::from(
+            crossterm::event::KeyCode::Char('w'),
+        ));
+        app.settle_filter_animation();
+        assert!(app.visible.is_empty());
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        assert_eq!(choice("w", &terminal).bg, highlight);
+        assert_eq!(choice("i", &terminal).fg, color(&config.theme.foreground));
+
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('g'),
+            crossterm::event::KeyModifiers::CONTROL,
+        ));
+        for _ in 0..4 {
+            app.handle_key(crossterm::event::KeyEvent::from(
+                crossterm::event::KeyCode::Backspace,
+            ));
+        }
+        for character in "zzz".chars() {
+            app.handle_key(crossterm::event::KeyEvent::from(
+                crossterm::event::KeyCode::Char(character),
+            ));
+        }
+        app.handle_key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('g'),
+            crossterm::event::KeyModifiers::CONTROL,
+        ));
+        app.handle_key(crossterm::event::KeyEvent::from(
+            crossterm::event::KeyCode::Char('a'),
+        ));
+        app.settle_filter_animation();
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        assert_eq!(choice("w", &terminal).fg, color(&config.theme.border));
+        assert_eq!(choice("i", &terminal).fg, color(&config.theme.border));
+
+        assert!(app.replace_source(Vec::new(), 0));
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        assert_eq!(choice("a", &terminal).bg, highlight);
+        assert_eq!(choice("i", &terminal).fg, color(&config.theme.border));
     }
 
     #[test]

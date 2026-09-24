@@ -148,9 +148,10 @@ Vellum SHALL show a right-aligned filter strip in the search border cutout while
 - WHEN the normal and filter-mode frames are drawn
 - THEN filter mode shows the configurable all label and every configured choice by its key, using the configured separator in the input border's muted color with one space around each default separator, expanding the active label with its color as a background highlight while inactive labels are uncolored
 - AND the all choice uses the theme's selection foreground and background together for legible text
+- AND unselected choices with no items matching both the current fuzzy search and that choice's exact filter are muted while choices with results use the regular foreground, updating after query edits and live source refreshes; the selected choice keeps its highlight even if empty
 - AND switching choices slides the highlight to the new position
 - AND opening or closing filter mode animates between the full strip and the active-only indicator, or no indicator for all items
-- AND the footer identifies the filter binding outside filter mode and compactly lists the filter name and keys inside it
+- AND the footer identifies the filter binding outside filter mode and compactly lists its keys before its name inside it, styling keyboard bindings differently from hint labels throughout the footer
 
 ### Requirement: Separate terminal rendering from machine output
 

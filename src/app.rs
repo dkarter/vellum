@@ -47,6 +47,7 @@ pub struct App {
     item_config: ItemConfig,
     keybindings: Keybindings,
     filter_config: FilterConfig,
+    filter_availability: Vec<bool>,
     input_config: InputConfig,
     action_config: ActionsConfig,
     availability_cache: HashMap<AvailabilityCommand, CachedAvailability>,
@@ -136,12 +137,20 @@ impl App {
         action_config: ActionsConfig,
     ) -> Self {
         let items = render_items(&source_items, &item_config, 0);
+        let filter_availability = filter_choice_availability(
+            &source_items,
+            &items,
+            "",
+            &frecency_scores,
+            &filter_config.choices,
+        );
         let filter_mode =
             input_config.start_mode == StartMode::Filter && !filter_config.choices.is_empty();
         let mut app = Self {
             item_config,
             keybindings,
             filter_config,
+            filter_availability,
             action_config,
             availability_cache: HashMap::new(),
             availability_in_flight: HashSet::new(),
@@ -407,6 +416,7 @@ impl App {
         if self.item_animation_interval().is_some() {
             self.items = render_items(&self.source_items, &self.item_config, elapsed_ms);
             self.visible = self.matching_indices();
+            self.update_filter_availability();
             self.clamp_selection();
         }
         self.finish_filter_transition();
@@ -448,6 +458,7 @@ impl App {
             .flatten();
         self.source_items = source_items;
         self.items = render_items(&self.source_items, &self.item_config, elapsed_ms);
+        self.update_filter_availability();
         self.visible = self.matching_indices();
         let previous_position = self.selected;
         let restored_position = selected_value.as_ref().and_then(|value| {
@@ -652,6 +663,13 @@ impl App {
 
     pub(crate) fn active_filter_index(&self) -> Option<usize> {
         self.active_filter
+    }
+
+    pub(crate) fn filter_has_items(&self, index: Option<usize>) -> bool {
+        self.filter_availability
+            .get(index.map_or(0, |index| index + 1))
+            .copied()
+            .unwrap_or(false)
     }
 
     fn set_filter(&mut self, next: Option<usize>) {
@@ -940,31 +958,34 @@ impl App {
 
     fn refilter(&mut self) {
         self.visible = self.matching_indices();
+        self.update_filter_availability();
         self.selected = 0;
+    }
+
+    fn update_filter_availability(&mut self) {
+        self.filter_availability = filter_choice_availability(
+            &self.source_items,
+            &self.items,
+            &self.query,
+            &self.frecency_scores,
+            &self.filter_config.choices,
+        );
     }
 
     fn matching_indices(&self) -> Vec<usize> {
         let choice = self.active_filter();
-        let path = choice.map(|choice| {
-            choice
-                .source
-                .strip_prefix('$')
-                .unwrap_or(&choice.source)
-                .split('.')
-                .collect::<Vec<_>>()
-        });
+        let path = choice.map(filter_path);
         matching_indices_with_frecency_by(
             &self.items,
             &self.query,
             &self.frecency_scores,
             |index| {
                 choice.is_none_or(|choice| {
-                    field_value_at(
+                    matches_filter(
                         &self.source_items[index],
                         path.as_deref().unwrap_or_default(),
+                        choice,
                     )
-                    .and_then(serde_json::Value::as_str)
-                        == Some(&choice.value)
                 })
             },
         )
@@ -1071,6 +1092,41 @@ impl App {
     fn clamp_selection(&mut self) {
         self.selected = self.selected.min(self.visible.len().saturating_sub(1));
     }
+}
+
+fn filter_path(choice: &FilterChoice) -> Vec<&str> {
+    choice
+        .source
+        .strip_prefix('$')
+        .unwrap_or(&choice.source)
+        .split('.')
+        .collect()
+}
+
+fn matches_filter(item: &SourceItem, path: &[&str], choice: &FilterChoice) -> bool {
+    field_value_at(item, path).and_then(serde_json::Value::as_str) == Some(&choice.value)
+}
+
+fn filter_choice_availability(
+    source_items: &[SourceItem],
+    items: &[RenderedItem],
+    query: &str,
+    frecency: &HashMap<String, FrecencyRank>,
+    choices: &[FilterChoice],
+) -> Vec<bool> {
+    if choices.is_empty() {
+        return Vec::new();
+    }
+    let candidates = matching_indices_with_frecency_by(items, query, frecency, |_| true);
+    let mut availability = Vec::with_capacity(choices.len() + 1);
+    availability.push(!candidates.is_empty());
+    availability.extend(choices.iter().map(|choice| {
+        let path = filter_path(choice);
+        candidates
+            .iter()
+            .any(|&index| matches_filter(&source_items[index], &path, choice))
+    }));
+    availability
 }
 
 fn previous_boundary(value: &str, cursor: usize) -> usize {
