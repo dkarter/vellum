@@ -55,6 +55,7 @@ export default defineConfig({
             { label: "Sources", slug: "docs/sources" },
             { label: "Item templates", slug: "docs/item-templates" },
             { label: "Actions", slug: "docs/actions" },
+            { label: "Previews", slug: "docs/previews" },
             { label: "Filters and input", slug: "docs/filters-input" },
             { label: "Frecency", slug: "docs/frecency" },
           ],

@@ -6,6 +6,17 @@ Resolve palette names and paths, expose help, and reject ambiguous invocation.
 
 ## Requirements
 
+### Requirement: Override preview from the command line
+
+Vellum SHALL allow enabling, disabling, and placing a configured preview for one invocation.
+
+#### Scenario: Preview flags parse and override configuration {#CLI-010}
+
+- GIVEN `--preview`, `--no-preview`, or `--preview-position left|right|top|bottom`
+- WHEN CLI arguments are parsed
+- THEN the requested visibility and placement override palette and global defaults
+- AND the override survives a stdin source terminal restart
+
 ### Requirement: Accept explicit palette paths
 
 Vellum SHALL preserve explicit TOML paths supplied by the user.

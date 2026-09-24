@@ -22,6 +22,7 @@ After merging, exactly one source kind must be set.
 | `[filters]` | Exact-match filter mode and choices |
 | `[frecency]` | History ranking and storage bound |
 | `[actions]` | Default, direct, and menu actions |
+| `[preview]` | Optional command preview for the selected item |
 | `[item]` | Output value, layout, spacing, and tokens |
 | `[theme]` | Terminal colors and mode badge colors |
 
@@ -42,5 +43,7 @@ normal_mode_background = "#e0af68"
 Colors accept Ratatui names such as `cyan`, `dark_gray`, and `reset`, or RGB hex values. Some presentation colors can read a source field by using a value such as `$status_color`.
 
 Copy-ready [Tokyo Night, Catppuccin Mocha, Dracula, Gruvbox Dark, and Nord themes](https://github.com/dkarter/vellum/tree/main/examples/themes) are available in `examples/themes/`. Use one as your global `config.toml`, or copy its `[theme]` section into an existing global or palette configuration.
+
+For a live theme browser, run `vlm palettes sync` then `vlm themes`. Enter saves the highlighted theme to your global config. Add `item.box_title = "Results"` to a palette to surround its list with a named border.
 
 See the [schema reference](../schemas/) for editor completion and the complete option inventory.

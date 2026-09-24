@@ -21,6 +21,7 @@ Then install the bundled Herdr and file-finding palettes:
 ```sh
 vlm palettes sync
 vlm files
+vlm themes # browse and apply a theme with live color previews
 ```
 
 Vellum writes accepted values to stdout and keeps its interface and diagnostics on stderr, so it composes cleanly with other terminal tools:
@@ -28,7 +29,10 @@ Vellum writes accepted values to stdout and keeps its interface and diagnostics 
 ```sh
 pane_id="$(vlm herdr-agents)" && herdr agent focus "$pane_id"
 file="$(vlm files)" && "${EDITOR:-vi}" -- "$file"
+
 ```
+
+For opt-in previews, run `vlm examples/files-preview.toml` from a repository checkout with `bat` installed. Configure placements and commands in the [preview guide](https://vellum.doriankarter.com/docs/previews/).
 
 See the [documentation](https://vellum.doriankarter.com/docs/) for installation, configuration, palette authoring, sources, templates, actions, filters, input, frecency, schemas, official palettes, and the CLI reference.
 

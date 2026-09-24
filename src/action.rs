@@ -99,13 +99,13 @@ pub fn check_availability(check: &AvailabilityCommand) -> bool {
     }
 }
 
-fn interpolate(argv: &[String], item: &Map<String, Value>) -> Result<Vec<String>> {
+pub(crate) fn interpolate(argv: &[String], item: &Map<String, Value>) -> Result<Vec<String>> {
     argv.iter()
         .map(|argument| interpolate_argument(argument, item))
         .collect()
 }
 
-fn interpolate_argument(argument: &str, item: &Map<String, Value>) -> Result<String> {
+pub(crate) fn interpolate_argument(argument: &str, item: &Map<String, Value>) -> Result<String> {
     let Some(path) = field_expression(argument) else {
         return Ok(argument.to_owned());
     };

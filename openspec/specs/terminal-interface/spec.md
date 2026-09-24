@@ -6,6 +6,50 @@ Render a compact responsive terminal interface that composes cleanly inside mult
 
 ## Requirements
 
+### Requirement: Navigate and style previews
+
+Vellum SHALL render ANSI-colored preview output, scroll it with configurable bindings, optionally show a scrollbar, and allow full, separator, or borderless preview chrome. Results MAY have a titled surrounding box.
+
+#### Scenario: Colored output and scrolling remain independent of selection {#UI-017}
+
+- GIVEN preview output with ANSI colors longer than the preview viewport
+- WHEN preview scroll bindings are pressed
+- THEN the pane moves without changing the selected item
+- AND its colors and scroll position are rendered safely
+- AND mouse-wheel input over the preview scrolls it while wheel input over results moves selection
+
+#### Scenario: Preview transitions are immediate and reuse recent results {#UI-019}
+
+- GIVEN a command preview with several selectable items
+- WHEN selection changes rapidly or revisits an item
+- THEN the old content remains visible until the latest command finishes
+- AND a recent result is shown immediately from a bounded cache without rerunning its command
+- AND stale workers cannot replace the newest selection
+
+#### Scenario: Preview and results chrome are configurable {#UI-018}
+
+- GIVEN preview border and scrollbar options and a results box title
+- WHEN the palette is drawn
+- THEN the configured separator or full border, scrollbar, and titled results box are visible
+
+### Requirement: Preview the highlighted item
+
+Vellum SHALL optionally render command output for the selected source item in a themed pane on the left, right, top, or bottom. It SHALL load previews asynchronously, discard stale results, and remain responsive to slow commands.
+
+#### Scenario: Preview follows selection without blocking input {#UI-015}
+
+- GIVEN a configured preview command and multiple items
+- WHEN the selection changes while a preview is running
+- THEN the pane shows the new item's output instead of stale output
+- AND search and navigation remain responsive
+
+#### Scenario: Preview layout adapts to available space {#UI-016}
+
+- GIVEN a preview configured on the left, right, top, or bottom
+- WHEN a frame is drawn in a wide or narrow terminal
+- THEN the pane uses the configured placement and theme colors when space permits
+- AND small terminals keep the item list usable
+
 ### Requirement: Render palette content
 
 Vellum SHALL render search state, multiline items, metadata alignment, selection, and result counts.

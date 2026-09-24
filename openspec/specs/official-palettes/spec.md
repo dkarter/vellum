@@ -3,6 +3,24 @@
 ## Purpose
 Distribute maintained Herdr and file-finder palettes safely through the Vellum binary.
 ## Requirements
+### Requirement: Browse and apply themes
+
+Vellum SHALL bundle a theme browser with modern theme variants. Browsing SHALL update the running interface live; accepting SHALL write the chosen theme to the global config while retaining unrelated settings and comments.
+
+#### Scenario: Browsing themes changes the live palette {#PAL-018}
+
+- GIVEN the bundled themes palette
+- WHEN the highlight moves between theme variants
+- THEN the visible interface colors change without restarting or modifying disk
+- AND a full sample palette and color swatches appear beside the theme list
+
+#### Scenario: Accepting a theme updates global defaults {#PAL-019}
+
+- GIVEN an existing or absent global config
+- WHEN a theme is accepted
+- THEN its colors are stored in the global `[theme]` table
+- AND unrelated config and comments are preserved
+
 ### Requirement: Safely synchronize official palettes
 
 Vellum SHALL install bundled palettes into the XDG palette directory without silently replacing user files.

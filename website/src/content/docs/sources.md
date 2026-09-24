@@ -26,11 +26,11 @@ Use normal shell caution because the command is explicitly shell-backed. The con
 
 ```toml
 [source]
-builtin = "herdr-workspaces" # herdr-agents or files
+builtin = "herdr-workspaces" # herdr-agents, files, or themes
 refresh_ms = 1000
 ```
 
-`herdr-workspaces` and `herdr-agents` consume `herdr api snapshot`. `files` invokes `fd --type f --color never --print0`. Built-ins normalize records in process, avoiding fragile shell transformation pipelines.
+`herdr-workspaces` and `herdr-agents` consume `herdr api snapshot`. `files` invokes `fd --type f --color never --print0`. `themes` provides Vellum's built-in theme variants for the theme browser. Built-ins normalize records in process, avoiding fragile shell transformation pipelines.
 
 ## File sources
 

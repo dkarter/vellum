@@ -19,6 +19,7 @@ pub enum BuiltinSource {
     HerdrWorkspaces,
     HerdrAgents,
     Files,
+    Themes,
 }
 
 impl BuiltinSource {
@@ -34,6 +35,7 @@ impl BuiltinSource {
             Self::HerdrWorkspaces => run_herdr_workspaces(cancellation),
             Self::HerdrAgents => run_herdr_agents(cancellation),
             Self::Files => run_files(cancellation),
+            Self::Themes => Ok(crate::themes::items()),
         }
     }
 }

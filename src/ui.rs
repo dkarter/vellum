@@ -6,13 +6,16 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Padding, Paragraph},
+    widgets::{
+        Block, Borders, Clear, List, ListItem, ListState, Padding, Paragraph, Scrollbar,
+        ScrollbarOrientation, ScrollbarState,
+    },
 };
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     app::App,
-    config::{Alignment, Config, Theme},
+    config::{Alignment, Config, PreviewBorder, PreviewPosition, Theme},
     item::{RenderedRow, RenderedSegment},
 };
 
@@ -52,10 +55,11 @@ fn render_with_cursor_position(
     let theme = &config.theme;
     let mut cursor_position = None;
     let area = frame.area();
+    app.preview_visible = false;
     let background = Block::new().style(Style::new().bg(color(&theme.background)));
     frame.render_widget(background, area);
 
-    let (search_area, list_area, footer_area) = if config.search.enabled {
+    let (search_area, mut list_area, footer_area) = if config.search.enabled {
         let [search, list, footer] = Layout::vertical([
             Constraint::Length(3),
             Constraint::Fill(1),
@@ -68,6 +72,47 @@ fn render_with_cursor_position(
             Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(area);
         (None, list, footer)
     };
+    app.preview_area = None;
+
+    if config.preview.enabled && list_area.width >= 42 && list_area.height >= 8 {
+        let position = config.preview.position;
+        let percent = config.preview.size;
+        let side_width =
+            (list_area.width.saturating_mul(percent) / 100).min(list_area.width.saturating_sub(30));
+        let (list, preview) = match position {
+            PreviewPosition::Left => {
+                let [preview, list] =
+                    Layout::horizontal([Constraint::Length(side_width), Constraint::Fill(1)])
+                        .areas(list_area);
+                (list, preview)
+            }
+            PreviewPosition::Right => {
+                let [list, preview] =
+                    Layout::horizontal([Constraint::Fill(1), Constraint::Length(side_width)])
+                        .areas(list_area);
+                (list, preview)
+            }
+            PreviewPosition::Top => {
+                let [preview, list] =
+                    Layout::vertical([Constraint::Percentage(percent), Constraint::Fill(1)])
+                        .areas(list_area);
+                (list, preview)
+            }
+            PreviewPosition::Bottom => {
+                let [list, preview] =
+                    Layout::vertical([Constraint::Fill(1), Constraint::Percentage(percent)])
+                        .areas(list_area);
+                (list, preview)
+            }
+        };
+        if list.width >= 18 && list.height >= 3 && preview.width >= 18 && preview.height >= 3 {
+            app.preview_visible = true;
+            app.preview_area = Some(preview);
+            list_area = list;
+            render_preview(frame, app, config, preview);
+        }
+    }
+    app.results_area = list_area;
 
     if let Some(search_area) = search_area {
         let (query, cursor_offset) = if app.query.is_empty() {
@@ -112,8 +157,13 @@ fn render_with_cursor_position(
         .padding
         .saturating_mul(2)
         .saturating_add(if config.item.border { 2 } else { 0 });
-    let inner_width = list_area.width.saturating_sub(horizontal_chrome) as usize;
-    let spacing = usize::from(config.item.spacing.min(list_area.height));
+    let boxed = config.item.box_title.is_some();
+    let inner_width = list_area
+        .width
+        .saturating_sub(horizontal_chrome.saturating_add(if boxed { 2 } else { 0 }))
+        as usize;
+    let list_height = list_area.height.saturating_sub(if boxed { 2 } else { 0 });
+    let spacing = usize::from(config.item.spacing.min(list_height));
     let item_height = app
         .visible
         .first()
@@ -121,7 +171,7 @@ fn render_with_cursor_position(
         .map(|item| item.rows.len())
         .unwrap_or(1)
         .max(1);
-    let page_size = (usize::from(list_area.height).saturating_add(spacing)
+    let page_size = (usize::from(list_height).saturating_add(spacing)
         / item_height.saturating_add(spacing))
     .max(1);
     app.set_list_page_size(page_size);
@@ -154,14 +204,19 @@ fn render_with_cursor_position(
         }
         list_items.push(list_item);
     }
-    let list_block = Block::new()
-        .borders(if config.item.border {
+    let mut list_block = Block::new()
+        .borders(if boxed {
+            Borders::ALL
+        } else if config.item.border {
             Borders::LEFT | Borders::RIGHT
         } else {
             Borders::NONE
         })
         .padding(Padding::horizontal(config.item.padding))
         .border_style(Style::new().fg(color(&theme.border)));
+    if let Some(title) = &config.item.box_title {
+        list_block = list_block.title(format!(" {title} "));
+    }
     let list = List::new(list_items)
         .block(list_block)
         .highlight_style(Style::new().bg(color(&theme.selection_background)));
@@ -216,6 +271,13 @@ fn render_with_cursor_position(
         {
             text.push_str(&format!("  {} actions", config.actions.menu.label()));
         }
+        if app.preview_visible {
+            text.push_str(&format!(
+                "  {}/{} preview",
+                config.preview.scroll_up.label(),
+                config.preview.scroll_down.label()
+            ));
+        }
         text
     };
     let mut footer = Vec::with_capacity(3);
@@ -258,6 +320,190 @@ fn render_with_cursor_position(
         cursor_position = Some(position);
     }
     cursor_position
+}
+
+fn render_preview(frame: &mut Frame, app: &mut App, config: &Config, area: Rect) {
+    let theme = &config.theme;
+    let borders = match config.preview.border {
+        PreviewBorder::None => Borders::NONE,
+        PreviewBorder::Full => Borders::ALL,
+        PreviewBorder::Separator => match config.preview.position {
+            PreviewPosition::Left => Borders::RIGHT,
+            PreviewPosition::Right => Borders::LEFT,
+            PreviewPosition::Top => Borders::BOTTOM,
+            PreviewPosition::Bottom => Borders::TOP,
+        },
+    };
+    let block = Block::new()
+        .borders(borders)
+        .border_style(Style::new().fg(color(&theme.border)));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let mut content = inner;
+    if !config.preview.title.is_empty() && content.height > 1 {
+        let heading = Line::from(vec![
+            Span::styled(
+                " ◈ ",
+                Style::new()
+                    .fg(color(&theme.selection_background))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                &config.preview.title,
+                Style::new()
+                    .fg(color(&theme.foreground))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]);
+        frame.render_widget(
+            heading,
+            Rect {
+                height: 1,
+                ..content
+            },
+        );
+        if content.width >= 28 && app.preview_lines.lines.len() > content.height as usize {
+            let percent = app.preview_offset.saturating_mul(100) / app.preview_max_offset().max(1);
+            let indicator = format!(" {percent:>3}% ");
+            frame.render_widget(
+                Paragraph::new(indicator).style(Style::new().fg(color(&theme.border))),
+                Rect {
+                    x: content.right() - 6,
+                    width: 6,
+                    height: 1,
+                    ..content
+                },
+            );
+        }
+        content.y += 1;
+        content.height -= 1;
+    }
+    app.set_preview_height(content.height as usize);
+    if config.source.builtin == Some(crate::builtins::BuiltinSource::Themes) {
+        render_theme_showcase(frame, content, app, theme);
+        return;
+    }
+    let count = app.preview_lines.lines.len();
+    let show_scrollbar =
+        config.preview.scrollbar && count > content.height as usize && content.width > 2;
+    if show_scrollbar {
+        let scrollbar_area = Rect {
+            x: content.right() - 1,
+            width: 1,
+            ..content
+        };
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None)
+            .thumb_symbol("▏")
+            .track_symbol(Some("┊"))
+            .thumb_style(Style::new().fg(color(&theme.selection_background)))
+            .track_style(Style::new().fg(color(&theme.border)));
+        let mut state = ScrollbarState::new(count.saturating_sub(content.height as usize) + 1)
+            .position(app.preview_offset);
+        frame.render_stateful_widget(scrollbar, scrollbar_area, &mut state);
+        content.width -= 1;
+    }
+    let start = app.preview_offset.min(count);
+    let end = start.saturating_add(content.height as usize).min(count);
+    frame.render_widget(
+        Paragraph::new(app.preview_lines.lines[start..end].to_vec()).style(base_style(theme)),
+        content,
+    );
+}
+
+fn render_theme_showcase(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    if area.width < 16 || area.height < 6 {
+        return;
+    }
+    let swatch_height = if area.height >= 10 { 2 } else { 1 };
+    let [search, results, swatches, footer] = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Fill(1),
+        Constraint::Length(swatch_height),
+        Constraint::Length(1),
+    ])
+    .areas(area);
+    let search_block = Block::new()
+        .borders(Borders::ALL)
+        .border_style(Style::new().fg(color(&theme.border)))
+        .title(" Example palette ");
+    frame.render_widget(
+        Paragraph::new("Search workspaces...")
+            .style(base_style(theme))
+            .block(search_block),
+        search,
+    );
+    let selected = Style::new()
+        .fg(color(&theme.selection_foreground))
+        .bg(color(&theme.selection_background))
+        .add_modifier(Modifier::BOLD);
+    let items = if area.width < 42 {
+        [
+            ListItem::new("  ◇  dotfiles"),
+            ListItem::new("  ◆  vellum"),
+            ListItem::new("  ◇  notes"),
+        ]
+    } else {
+        [
+            ListItem::new("  ◇  dotfiles       ~/dotfiles"),
+            ListItem::new("  ◆  vellum         ~/dev/vellum"),
+            ListItem::new("  ◇  notes          ~/notes"),
+        ]
+    };
+    let list = List::new(items).highlight_style(selected);
+    let mut state = ListState::default().with_selected(Some(1));
+    frame.render_stateful_widget(list, results, &mut state);
+    let name = app
+        .selected_source_item()
+        .and_then(|item| item.get("name"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("Theme");
+    let swatches_line = Line::from(vec![
+        Span::styled(" ▪▪ ", Style::new().fg(color(&theme.foreground))),
+        Span::styled(" ▪▪ ", Style::new().fg(color(&theme.selection_background))),
+        Span::styled(
+            " ▪▪ ",
+            Style::new().fg(color(&theme.insert_mode_background)),
+        ),
+        Span::styled(
+            " ▪▪ ",
+            Style::new().fg(color(&theme.normal_mode_background)),
+        ),
+    ]);
+    if swatch_height == 2 {
+        frame.render_widget(
+            Paragraph::new(name).style(Style::new().fg(color(&theme.border))),
+            Rect {
+                height: 1,
+                ..swatches
+            },
+        );
+    }
+    frame.render_widget(
+        swatches_line,
+        Rect {
+            y: swatches.bottom() - 1,
+            height: 1,
+            ..swatches
+        },
+    );
+    frame.render_widget(
+        Line::from(vec![
+            Span::styled(
+                " INSERT ",
+                Style::new()
+                    .fg(color(&theme.mode_foreground))
+                    .bg(color(&theme.insert_mode_background))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "  3/3  enter select  esc cancel",
+                Style::new().fg(color(&theme.border)),
+            ),
+        ]),
+        footer,
+    );
 }
 
 fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) -> Option<(u16, u16)> {
@@ -490,6 +736,111 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn ui_018_preview_chrome_and_named_results_box_render() {
+        let mut config = Config::parse("[source]\ncmd='unused'\n[item]\nbox_title='Results'\ntemplate=[['$name']]\nvalue='$name'\n[preview]\nenabled=true\ncommand=['cat','$name']").unwrap();
+        let mut app = App::new(
+            vec![json!({"name":"One"}).as_object().unwrap().clone()],
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            true,
+        );
+        app.set_preview_text((0..60).map(|i| format!("Line {i}\n")).collect());
+        let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let output: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(output.contains("Results"));
+        assert!(output.contains("▏"));
+        assert!(output.contains("◈ Preview"));
+        assert_eq!(buffer[(0, 3)].symbol(), "┌");
+        config.preview.border = PreviewBorder::Full;
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        assert!(
+            terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .filter(|cell| cell.symbol() == "┌")
+                .count()
+                >= 2
+        );
+        config.preview.border = PreviewBorder::None;
+        config.preview.scrollbar = false;
+        terminal
+            .draw(|frame| render(frame, &mut app, &config))
+            .unwrap();
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(!output.contains("▏"));
+    }
+
+    #[test]
+    fn ui_016_preview_layout_adapts_to_available_space() {
+        let mut config = Config::parse("[source]\ncmd='unused'\n[item]\ntemplate=[['$name']]\nvalue='$name'\n[preview]\nenabled=true\ncommand=['cat','$name']").unwrap();
+        let mut app = App::new(
+            vec![json!({"name":"Result"}).as_object().unwrap().clone()],
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            true,
+        );
+        app.set_preview_text("Preview content".into());
+        for position in [
+            PreviewPosition::Left,
+            PreviewPosition::Right,
+            PreviewPosition::Top,
+            PreviewPosition::Bottom,
+        ] {
+            config.preview.position = position;
+            let mut terminal = Terminal::new(TestBackend::new(80, 22)).unwrap();
+            terminal
+                .draw(|frame| render(frame, &mut app, &config))
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let result = buffer
+                .content
+                .iter()
+                .position(|cell| cell.symbol() == "R")
+                .unwrap();
+            let preview = buffer
+                .content
+                .iter()
+                .position(|cell| cell.symbol() == "P" && cell.fg == color(&config.theme.foreground))
+                .unwrap();
+            match position {
+                PreviewPosition::Left => assert!(preview % 80 < result % 80),
+                PreviewPosition::Right => assert!(preview % 80 > result % 80),
+                PreviewPosition::Top => assert!(preview / 80 < result / 80),
+                PreviewPosition::Bottom => assert!(preview / 80 > result / 80),
+            }
+            let mut tiny = Terminal::new(TestBackend::new(20, 5)).unwrap();
+            tiny.draw(|frame| render(frame, &mut app, &config)).unwrap();
+            let output: String = tiny
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(output.contains("Result"));
+            assert!(!output.contains("Preview content"));
+        }
+    }
 
     #[test]
     fn ui_001_renders_search_multiline_items_and_footer() {

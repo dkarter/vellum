@@ -1,0 +1,24 @@
+#:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json
+
+# A boxed, bottom-placed alternative: vlm examples/files-preview-framed.toml
+[search]
+title = "Files"
+
+[source]
+builtin = "files"
+
+[item]
+value = "$path"
+box_title = "Results"
+template = [["$icon", "  ", "$path"]]
+
+[preview]
+enabled = true
+position = "bottom"
+size = 45
+title = "Contents"
+border = "full"
+scrollbar = true
+scroll_up = "ctrl-y"
+scroll_down = "ctrl-v"
+command = ["bat", "--color=always", "--decorations=always", "--style=numbers", "--line-range=:300", "$path"]

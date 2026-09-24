@@ -46,6 +46,16 @@ When no palette is given, `--stdin` uses a minimal finder that displays and retu
 
 With zero or multiple initial items, `--select-1` opens the interactive palette normally. A sole item follows the usual accept behavior, including its configured `item.value` or default action.
 
+### Preview options
+
+| Option | Meaning |
+| --- | --- |
+| `--preview` | Enable a configured preview for this run |
+| `--no-preview` | Hide previews for this run |
+| `--preview-position left\|right\|top\|bottom` | Enable the preview at this position for this run |
+
+See [previews](../previews/) for command and theme configuration.
+
 ## `vlm palettes sync`
 
 Copy official palettes into `<config-root>/palettes`. Existing paths are reported and skipped.

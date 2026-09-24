@@ -1,0 +1,17 @@
+#:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json
+
+# Minimal chrome: vlm examples/files-preview-clean.toml
+[source]
+builtin = "files"
+
+[item]
+value = "$path"
+template = [["$path"]]
+
+[preview]
+enabled = true
+position = "left"
+border = "none"
+title = ""
+scrollbar = false
+command = ["bat", "--color=always", "--decorations=always", "--style=plain", "--line-range=:300", "$path"]

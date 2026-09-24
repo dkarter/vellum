@@ -15,6 +15,24 @@
         "placeholder": { "type": "string", "default": "Search..." }
       }
     },
+    "preview": {
+      "description": "Optional asynchronous command preview for the selected item.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "position": { "enum": ["left", "right", "top", "bottom"], "default": "right" },
+        "size": { "type": "integer", "minimum": 10, "maximum": 90, "default": 50 },
+        "title": { "type": "string", "default": "Preview" },
+        "border": { "description": "Pane chrome: separator on the edge facing results, a full box, or none.", "enum": ["separator", "full", "none"], "default": "separator" },
+        "scrollbar": { "type": "boolean", "default": true },
+        "scroll_up": { "$ref": "#/$defs/bindings", "default": "ctrl-u" },
+        "scroll_down": { "$ref": "#/$defs/bindings", "default": "ctrl-d" },
+        "command": { "description": "Direct argv command. An argument consisting of $field or $nested.field is replaced with the selected scalar field.", "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "cwd": { "description": "Working directory; supports a selected scalar field as $field or $nested.field.", "type": "string", "minLength": 1 },
+        "timeout_ms": { "type": "integer", "minimum": 1, "default": 2000 }
+      }
+    },
     "source": {
       "type": "object",
       "additionalProperties": false,
@@ -26,7 +44,7 @@
         },
         "builtin": {
           "description": "Maintained in-process source adapter. Mutually exclusive with cmd, file, and stdin.",
-          "enum": ["herdr-workspaces", "herdr-agents", "files"]
+          "enum": ["herdr-workspaces", "herdr-agents", "files", "themes"]
         },
         "file": {
           "description": "Path to a JSON, JSONC, YAML, or TOML item file. Relative paths resolve from the configuration file that declares them. Mutually exclusive with cmd, builtin, and stdin.",
@@ -118,6 +136,7 @@
       "additionalProperties": false,
       "properties": {
         "border": { "type": "boolean", "default": false },
+        "box_title": { "description": "Optional title for a full border around the result list.", "type": "string" },
         "padding": { "type": "integer", "minimum": 0, "maximum": 65535, "default": 1 },
         "spacing": { "type": "integer", "minimum": 0, "maximum": 65535, "default": 0 },
         "alternate_background": {

@@ -5,5 +5,7 @@ pub mod config;
 pub mod frecency;
 pub mod item;
 pub mod official;
+pub mod preview;
 pub mod source;
+pub mod themes;
 pub mod ui;

@@ -17,7 +17,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use anyhow::{Context, Result, bail};
 use crossterm::{
     cursor::{SetCursorStyle, Show},
-    event::{self, Event, KeyEventKind},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -25,9 +25,10 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 use vellum::{
     action,
     app::{App, Outcome},
+    builtins::BuiltinSource,
     config::{Config, OnSuccess},
     frecency::Frecency,
-    official, source, ui,
+    official, preview, source, themes, ui,
 };
 
 const REFRESH_POLL_RATE: Duration = Duration::from_millis(50);
@@ -124,6 +125,19 @@ fn main() -> Result<()> {
     };
     let global = global.as_deref().zip(global_path.as_deref());
     let mut config = Config::parse_layered_files(global, (&palette, &palette_path))?;
+    if let Some(enabled) = run_request.preview_enabled {
+        config.preview.enabled = enabled;
+    }
+    if let Some(position) = run_request.preview_position {
+        config.preview.position = position;
+        config.preview.enabled = true;
+    }
+    if config.preview.enabled
+        && config.preview.command.is_none()
+        && config.source.builtin != Some(BuiltinSource::Themes)
+    {
+        bail!("preview.command is required when preview is enabled");
+    }
     let stdin_source = if run_request.source_cache.is_none() {
         run_request.stdin.clone().or_else(|| {
             config.source.stdin.then(|| source::StdinSource {
@@ -134,6 +148,9 @@ fn main() -> Result<()> {
     } else {
         None
     };
+    let theme_browser = config.source.builtin == Some(BuiltinSource::Themes)
+        && stdin_source.is_none()
+        && run_request.source_cache.is_none();
     let stdin_items = if let Some(stdin) = &stdin_source {
         if config.actions.has_refresh_action() {
             bail!("stdin CLI sources cannot be used with action on_success = 'refresh'");
@@ -144,6 +161,8 @@ fn main() -> Result<()> {
                 &run_request.palette,
                 run_request.default_stdin_palette,
                 run_request.select_1,
+                run_request.preview_enabled,
+                run_request.preview_position,
                 &items,
             );
         }
@@ -200,6 +219,7 @@ fn main() -> Result<()> {
         frecency_scores,
         config.actions.clone(),
     );
+    app.configure_preview(config.preview.clone());
     if initial_source.is_some() {
         app.start_loading();
     }
@@ -219,10 +239,22 @@ fn main() -> Result<()> {
         outcome
     } else {
         let mut terminal = TerminalSession::init().context("failed to initialize terminal")?;
-        let result = run(&mut terminal.terminal, &mut app, &config, initial_source);
+        let result = run(
+            &mut terminal.terminal,
+            &mut app,
+            &mut config,
+            initial_source,
+            theme_browser,
+        );
         terminal.restore()?;
         result?
     };
+    if theme_browser && let Outcome::Accepted(id) = &outcome {
+        let path =
+            global_path.context("HOME and XDG_CONFIG_HOME are both unset; cannot save theme")?;
+        themes::save(&path, id)?;
+        return Ok(());
+    }
     if let Outcome::Accepted(value) = &outcome
         && let Err(error) = record_selection(frecency.as_mut(), &palette_key, value)
     {
@@ -247,6 +279,11 @@ impl TerminalSession {
             let _ = disable_raw_mode();
             return Err(error.into());
         }
+        if let Err(error) = execute!(stderr, EnableMouseCapture) {
+            let _ = execute!(stderr, LeaveAlternateScreen);
+            let _ = disable_raw_mode();
+            return Err(error.into());
+        }
         match Terminal::new(CrosstermBackend::new(stderr)) {
             Ok(terminal) => Ok(Self {
                 terminal,
@@ -254,7 +291,7 @@ impl TerminalSession {
             }),
             Err(error) => {
                 let mut stderr = io::stderr();
-                let _ = execute!(stderr, LeaveAlternateScreen);
+                let _ = execute!(stderr, DisableMouseCapture, LeaveAlternateScreen);
                 let _ = disable_raw_mode();
                 Err(error.into())
             }
@@ -269,6 +306,7 @@ impl TerminalSession {
             self.terminal.backend_mut(),
             SetCursorStyle::DefaultUserShape,
             Show,
+            DisableMouseCapture,
             LeaveAlternateScreen
         );
         let raw_mode_result = disable_raw_mode();
@@ -297,8 +335,9 @@ fn write_outcome(writer: &mut impl Write, outcome: &Outcome) -> Result<()> {
 fn run(
     terminal: &mut Tui,
     app: &mut App,
-    config: &Config,
+    config: &mut Config,
     initial_source: Option<SourceWorker>,
+    theme_browser: bool,
 ) -> Result<Outcome> {
     let started = Instant::now();
     let mut last_animation = Instant::now();
@@ -310,6 +349,7 @@ fn run(
     let animation_interval = app.animation_interval();
     let mut dirty = true;
     let mut cursor_mode = None;
+    let mut previews = preview::Controller::default();
     if let Some(result) = receive_refresh(&refresh_result)? {
         dirty |= apply_source_result(app, result, 0, initial_source_pending)?;
         refresh_result = None;
@@ -317,6 +357,12 @@ fn run(
         initial_source_pending = false;
     }
     loop {
+        if theme_browser {
+            dirty |= apply_selected_theme(app, config);
+        }
+        if !theme_browser {
+            dirty |= previews.update(app, &config.preview);
+        }
         if dirty {
             ui::redraw(terminal, app, config)?;
             let desired_cursor = if app.action_menu {
@@ -339,8 +385,15 @@ fn run(
                 last_refresh,
                 if initial_source_pending {
                     Some(INITIAL_SOURCE_POLL_RATE)
-                } else if refresh_result.is_some() || !availability_results.is_empty() {
-                    Some(REFRESH_POLL_RATE)
+                } else if refresh_result.is_some()
+                    || !availability_results.is_empty()
+                    || previews.pending()
+                {
+                    Some(if previews.pending() {
+                        Duration::from_millis(10)
+                    } else {
+                        REFRESH_POLL_RATE
+                    })
                 } else {
                     None
                 },
@@ -408,6 +461,18 @@ fn run(
     }
 }
 
+fn apply_selected_theme(app: &App, config: &mut Config) -> bool {
+    if config.source.builtin == Some(BuiltinSource::Themes)
+        && let Some(id) = app.selected_item().map(|item| item.value.as_str())
+        && let Some(theme) = themes::theme(id)
+        && config.theme != theme
+    {
+        config.theme = theme;
+        return true;
+    }
+    false
+}
+
 fn apply_source_result(
     app: &mut App,
     result: Result<Vec<source::SourceItem>>,
@@ -464,10 +529,11 @@ fn execute_requested_action(
 
 fn handle_terminal_event(app: &mut App, event: Event) -> bool {
     match event {
-        Event::Key(key) if key.kind == KeyEventKind::Press => {
+        Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
             app.handle_key(key);
             true
         }
+        Event::Mouse(mouse) => app.handle_mouse(mouse),
         Event::Resize(_, _) => true,
         _ => false,
     }
@@ -579,6 +645,8 @@ struct RunOptions {
     source_cache: Option<PathBuf>,
     default_stdin_palette: bool,
     select_1: bool,
+    preview_enabled: Option<bool>,
+    preview_position: Option<vellum::config::PreviewPosition>,
 }
 
 fn cli(args: impl Iterator<Item = String>) -> Result<Cli> {
@@ -604,6 +672,8 @@ fn parse_run_options(args: &[String]) -> Result<RunOptions> {
     let mut source_cache = None;
     let mut default_stdin_palette = false;
     let mut select_1 = false;
+    let mut preview_enabled = None;
+    let mut preview_position = None;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -651,6 +721,22 @@ fn parse_run_options(args: &[String]) -> Result<RunOptions> {
             }
             "--stdin-default-palette" => default_stdin_palette = true,
             "-1" | "--select-1" => select_1 = true,
+            "--preview" => preview_enabled = Some(true),
+            "--no-preview" => preview_enabled = Some(false),
+            "--preview-position" => {
+                index += 1;
+                preview_position = Some(
+                    match required_flag_value(args, index, "--preview-position")? {
+                        "left" => vellum::config::PreviewPosition::Left,
+                        "right" => vellum::config::PreviewPosition::Right,
+                        "top" => vellum::config::PreviewPosition::Top,
+                        "bottom" => vellum::config::PreviewPosition::Bottom,
+                        value => bail!(
+                            "invalid preview position '{value}'; expected left, right, top, or bottom"
+                        ),
+                    },
+                );
+            }
             argument if argument.starts_with('-') => {
                 bail!("unknown option '{argument}'; run 'vlm --help' for usage")
             }
@@ -673,6 +759,8 @@ fn parse_run_options(args: &[String]) -> Result<RunOptions> {
         source_cache,
         default_stdin_palette,
         select_1,
+        preview_enabled,
+        preview_position,
     })
 }
 
@@ -695,6 +783,8 @@ fn rerun_with_terminal_input(
     palette: &str,
     default_stdin_palette: bool,
     select_1: bool,
+    preview_enabled: Option<bool>,
+    preview_position: Option<vellum::config::PreviewPosition>,
     items: &[source::SourceItem],
 ) -> Result<()> {
     let cache = write_source_cache(items)?;
@@ -710,6 +800,17 @@ fn rerun_with_terminal_input(
     }
     if select_1 {
         command.arg("--select-1");
+    }
+    if let Some(enabled) = preview_enabled {
+        command.arg(if enabled { "--preview" } else { "--no-preview" });
+    }
+    if let Some(position) = preview_position {
+        command.arg("--preview-position").arg(match position {
+            vellum::config::PreviewPosition::Left => "left",
+            vellum::config::PreviewPosition::Right => "right",
+            vellum::config::PreviewPosition::Top => "top",
+            vellum::config::PreviewPosition::Bottom => "bottom",
+        });
     }
     let status = command
         .stdin(Stdio::from(terminal_input))
@@ -830,7 +931,7 @@ fn palette_identity(path: &std::path::Path) -> String {
 
 fn print_help() {
     println!(
-        "Vellum {}\n\nUsage:\n  vlm [PALETTE] [SOURCE OPTIONS]\n  vlm palettes sync [--overwrite]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nCommands:\n  palettes sync  Install bundled palettes without replacing existing files\n\nSource options:\n  --stdin                 Auto-detect plain lines, JSON, or NDJSON from standard input\n  --lines FIELD           Wrap each nonempty input line as {{FIELD: line}}\n  --field TARGET=SOURCE   Copy a dotted source field to a target field (repeatable)\n  --jq FILTER             Transform standard-input JSON through jq\n\nOptions:\n  -1, --select-1  Accept the initial result without opening the menu when exactly one exists\n  --overwrite     Replace existing official palette files during sync\n  -h, --help      Print help\n  -V, --version   Print version",
+        "Vellum {}\n\nUsage:\n  vlm [PALETTE] [SOURCE OPTIONS]\n  vlm palettes sync [--overwrite]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nCommands:\n  palettes sync  Install bundled palettes without replacing existing files\n\nSource options:\n  --stdin                 Auto-detect plain lines, JSON, or NDJSON from standard input\n  --lines FIELD           Wrap each nonempty input line as {{FIELD: line}}\n  --field TARGET=SOURCE   Copy a dotted source field to a target field (repeatable)\n  --jq FILTER             Transform standard-input JSON through jq\n\nOptions:\n  --preview                 Enable the configured preview\n  --no-preview              Hide the preview\n  --preview-position PLACE   Enable preview at left, right, top, or bottom\n  -1, --select-1            Accept the initial result without opening the menu when exactly one exists\n  --overwrite               Replace existing official palette files during sync\n  -h, --help                Print help\n  -V, --version             Print version",
         env!("CARGO_PKG_VERSION")
     );
 }
@@ -856,6 +957,95 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn ui_017_mouse_wheel_reaches_preview_through_terminal_dispatch() {
+        use crossterm::event::{KeyModifiers, MouseEvent, MouseEventKind};
+        let config = Config::parse("[source]\ncmd='unused'\n[item]\ntemplate=[['$id']]\nvalue='$id'\n[preview]\nenabled=true\ncommand=['true']").unwrap();
+        let mut app = App::new(
+            Vec::new(),
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            true,
+        );
+        app.configure_preview(config.preview.clone());
+        app.set_preview_text((0..30).map(|i| format!("{i}\n")).collect());
+        let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
+        terminal
+            .draw(|frame| ui::render(frame, &mut app, &config))
+            .unwrap();
+        assert!(handle_terminal_event(
+            &mut app,
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::ScrollDown,
+                column: 60,
+                row: 6,
+                modifiers: KeyModifiers::NONE,
+            })
+        ));
+        assert_eq!(app.preview_offset, 3);
+    }
+
+    #[test]
+    fn pal_018_theme_browser_recolors_on_selection() {
+        let mut config = Config::parse(include_str!("../palettes/themes.toml")).unwrap();
+        let mut app = App::new(
+            themes::items(),
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            config.search.enabled,
+        );
+        assert!(apply_selected_theme(&app, &mut config));
+        assert_eq!(config.theme.background, "#1a1b26");
+        app.handle_key(crossterm::event::KeyEvent::from(
+            crossterm::event::KeyCode::Down,
+        ));
+        assert!(apply_selected_theme(&app, &mut config));
+        assert_eq!(config.theme.background, "#24283b");
+        assert!(!apply_selected_theme(&app, &mut config));
+        let mut terminal = Terminal::new(TestBackend::new(100, 22)).unwrap();
+        terminal
+            .draw(|frame| ui::render(frame, &mut app, &config))
+            .unwrap();
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(output.contains("Example palette"));
+        assert!(output.contains("Search workspaces"));
+        assert!(output.contains("dotfiles"));
+        assert!(output.contains("▪▪"));
+    }
+
+    #[test]
+    fn cli_010_preview_flags_parse_and_override_configuration() {
+        let Cli::Run(options) =
+            cli(["files".into(), "--preview-position".into(), "bottom".into()].into_iter())
+                .unwrap()
+        else {
+            panic!("expected run")
+        };
+        assert_eq!(
+            options.preview_position,
+            Some(vellum::config::PreviewPosition::Bottom)
+        );
+        assert!(cli(["--preview-position".into(), "diagonal".into()].into_iter()).is_err());
+        let Cli::Run(options) = cli(["--no-preview".into()].into_iter()).unwrap() else {
+            panic!("expected run")
+        };
+        assert_eq!(options.preview_enabled, Some(false));
+        let Cli::Run(options) = cli(["--preview".into()].into_iter()).unwrap() else {
+            panic!("expected run")
+        };
+        assert_eq!(options.preview_enabled, Some(true));
+    }
 
     #[derive(Debug, PartialEq)]
     enum CursorEvent {
@@ -1071,6 +1261,8 @@ mod tests {
                 source_cache: None,
                 default_stdin_palette: false,
                 select_1: false,
+                preview_enabled: None,
+                preview_position: None,
             })
         );
     }
@@ -1110,6 +1302,8 @@ mod tests {
                 source_cache: None,
                 default_stdin_palette: false,
                 select_1: false,
+                preview_enabled: None,
+                preview_position: None,
             })
         );
     }
@@ -1220,6 +1414,8 @@ mod tests {
                 source_cache: None,
                 default_stdin_palette: false,
                 select_1: false,
+                preview_enabled: None,
+                preview_position: None,
             })
         );
 

@@ -25,6 +25,10 @@ pub const PALETTES: &[Palette] = &[
         name: "files",
         contents: include_str!("../palettes/files.toml"),
     },
+    Palette {
+        name: "themes",
+        contents: include_str!("../palettes/themes.toml"),
+    },
 ];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -508,6 +512,7 @@ mod tests {
             "herdr-workspaces" => builtins::herdr_workspaces(SNAPSHOT).unwrap().remove(0),
             "herdr-agents" => builtins::herdr_agents(SNAPSHOT).unwrap().remove(0),
             "files" => builtins::file_item(Path::new("src/main.rs")).unwrap(),
+            "themes" => crate::themes::items().remove(0),
             _ => panic!("missing representative item for {name}"),
         }
     }

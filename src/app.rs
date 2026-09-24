@@ -1,17 +1,19 @@
 use std::{
     collections::{HashMap, HashSet},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use nucleo_matcher::{Config as MatcherConfig, Matcher, Utf32Str, pattern::Pattern};
+use ratatui::text::Text;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     action::{AvailabilityCommand, prepare_availability},
     config::{
         ActionsConfig, Bindings, FilterChoice, FilterConfig, InputConfig, InputMode, ItemConfig,
-        Keybindings,
+        Keybindings, PreviewConfig,
     },
     frecency::FrecencyRank,
     item::{RenderedItem, field_value_at, matching_indices_with_frecency_by, render_items},
@@ -69,6 +71,13 @@ pub struct App {
     active_filter: Option<usize>,
     list_page_size: usize,
     pub selected: usize,
+    pub preview_lines: Arc<Text<'static>>,
+    pub preview_offset: usize,
+    preview_height: usize,
+    pub(crate) preview_visible: bool,
+    pub(crate) preview_area: Option<ratatui::layout::Rect>,
+    pub(crate) results_area: ratatui::layout::Rect,
+    preview_config: PreviewConfig,
     pub outcome: Outcome,
 }
 
@@ -157,6 +166,13 @@ impl App {
             active_filter: None,
             list_page_size: 1,
             selected: 0,
+            preview_lines: Arc::new(Text::default()),
+            preview_offset: 0,
+            preview_height: 1,
+            preview_visible: false,
+            preview_area: None,
+            results_area: ratatui::layout::Rect::default(),
+            preview_config: PreviewConfig::default(),
             outcome: Outcome::Running,
         };
         app.visible = app.matching_indices();
@@ -189,6 +205,20 @@ impl App {
             } else {
                 self.handle_action_query_key(key);
             }
+            return;
+        }
+        if self.preview_config.enabled
+            && self.preview_visible
+            && self.preview_config.scroll_down.matches(key)
+        {
+            self.scroll_preview(true);
+            return;
+        }
+        if self.preview_config.enabled
+            && self.preview_visible
+            && self.preview_config.scroll_up.matches(key)
+        {
+            self.scroll_preview(false);
             return;
         }
         if self.keybindings.enabled && self.action_config.menu.matches(key) {
@@ -284,8 +314,79 @@ impl App {
         }
     }
 
+    pub fn handle_mouse(&mut self, event: MouseEvent) -> bool {
+        if self.action_menu {
+            return false;
+        }
+        let down = match event.kind {
+            MouseEventKind::ScrollDown => true,
+            MouseEventKind::ScrollUp => false,
+            _ => return false,
+        };
+        let position = ratatui::layout::Position::new(event.column, event.row);
+        if self.preview_visible
+            && self
+                .preview_area
+                .is_some_and(|area| area.contains(position))
+        {
+            self.preview_offset = if down {
+                self.preview_offset
+                    .saturating_add(3)
+                    .min(self.preview_max_offset())
+            } else {
+                self.preview_offset.saturating_sub(3)
+            };
+            return true;
+        }
+        if self.results_area.contains(position) {
+            if down {
+                self.move_down();
+            } else {
+                self.move_up();
+            }
+            return true;
+        }
+        false
+    }
+
     pub fn vim_enabled(&self) -> bool {
         self.input_config.vim
+    }
+
+    pub fn configure_preview(&mut self, config: PreviewConfig) {
+        self.preview_config = config;
+    }
+
+    pub fn set_preview_text(&mut self, text: String) {
+        self.set_preview_content(Arc::new(crate::preview::parse_ansi(&text)));
+    }
+
+    pub fn set_preview_content(&mut self, content: Arc<Text<'static>>) {
+        self.preview_lines = content;
+        self.preview_offset = 0;
+    }
+
+    pub fn set_preview_height(&mut self, height: usize) {
+        self.preview_height = height.max(1);
+        self.preview_offset = self.preview_offset.min(self.preview_max_offset());
+    }
+
+    pub fn preview_max_offset(&self) -> usize {
+        self.preview_lines
+            .lines
+            .len()
+            .saturating_sub(self.preview_height)
+    }
+
+    fn scroll_preview(&mut self, down: bool) {
+        let step = (self.preview_height / 2).max(1);
+        self.preview_offset = if down {
+            self.preview_offset
+                .saturating_add(step)
+                .min(self.preview_max_offset())
+        } else {
+            self.preview_offset.saturating_sub(step)
+        };
     }
 
     pub fn tick(&mut self, elapsed_ms: u64) {
@@ -890,6 +991,57 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn ui_017_preview_scroll_keys_do_not_move_selection() {
+        let mut app = app();
+        app.configure_preview(PreviewConfig {
+            enabled: true,
+            ..PreviewConfig::default()
+        });
+        app.preview_visible = true;
+        app.set_preview_text(
+            (0..100)
+                .map(|i| format!("\u{1b}[31m{i}\u{1b}[0m\n"))
+                .collect(),
+        );
+        app.set_preview_height(10);
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
+        assert_eq!(app.preview_offset, 5);
+        assert_eq!(app.selected, 0);
+        assert_eq!(
+            app.preview_lines.lines[0].spans[0].style.fg,
+            Some(ratatui::style::Color::Indexed(1))
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+        assert_eq!(app.preview_offset, 0);
+        app.handle_key(KeyEvent::from(KeyCode::Down));
+        assert_eq!(app.selected, 1);
+        app.preview_visible = true;
+        app.preview_area = Some(ratatui::layout::Rect::new(30, 3, 30, 12));
+        app.results_area = ratatui::layout::Rect::new(0, 3, 30, 12);
+        app.selected = 0;
+        assert!(app.handle_mouse(MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 35,
+            row: 5,
+            modifiers: KeyModifiers::NONE
+        }));
+        assert_eq!(app.preview_offset, 3);
+        assert_eq!(app.selected, 0);
+        assert!(app.handle_mouse(MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 5,
+            row: 5,
+            modifiers: KeyModifiers::NONE
+        }));
+        assert_eq!(app.selected, 1);
+        assert_eq!(app.preview_offset, 3);
+        app.preview_visible = false;
+        app.selected = 0;
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
+        assert_eq!(app.selected, 1);
+    }
 
     fn app() -> App {
         let config: ItemConfig = toml::from_str(

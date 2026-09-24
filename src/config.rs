@@ -25,6 +25,8 @@ pub struct Config {
     pub actions: ActionsConfig,
     pub item: ItemConfig,
     #[serde(default)]
+    pub preview: PreviewConfig,
+    #[serde(default)]
     pub theme: Theme,
 }
 
@@ -191,6 +193,59 @@ pub struct SearchConfig {
     pub enabled: bool,
     pub title: String,
     pub placeholder: String,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct PreviewConfig {
+    pub enabled: bool,
+    pub position: PreviewPosition,
+    pub size: u16,
+    pub title: String,
+    pub command: Option<Vec<String>>,
+    pub cwd: Option<String>,
+    pub timeout_ms: u64,
+    pub border: PreviewBorder,
+    pub scrollbar: bool,
+    pub scroll_up: Bindings,
+    pub scroll_down: Bindings,
+}
+
+impl Default for PreviewConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            position: PreviewPosition::Right,
+            size: 50,
+            title: "Preview".into(),
+            command: None,
+            cwd: None,
+            timeout_ms: 2_000,
+            border: PreviewBorder::Separator,
+            scrollbar: true,
+            scroll_up: Bindings::new(["ctrl-u"]),
+            scroll_down: Bindings::new(["ctrl-d"]),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PreviewPosition {
+    Left,
+    #[default]
+    Right,
+    Top,
+    Bottom,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PreviewBorder {
+    None,
+    #[default]
+    Separator,
+    Full,
 }
 
 impl Default for SearchConfig {
@@ -409,6 +464,8 @@ pub enum InputMode {
 pub struct ItemConfig {
     #[serde(default)]
     pub border: bool,
+    #[serde(default)]
+    pub box_title: Option<String>,
     #[serde(default = "default_padding")]
     pub padding: u16,
     #[serde(default)]
@@ -583,6 +640,40 @@ impl Config {
     }
 
     fn validate(&self) -> Result<()> {
+        if self
+            .preview
+            .command
+            .as_ref()
+            .is_some_and(|cmd| cmd.is_empty() || cmd[0].trim().is_empty())
+        {
+            bail!("preview.command must contain a program");
+        }
+        if !(10..=90).contains(&self.preview.size) {
+            bail!("preview.size must be between 10 and 90");
+        }
+        if self.preview.timeout_ms == 0 {
+            bail!("preview.timeout_ms must be positive");
+        }
+        if self
+            .preview
+            .cwd
+            .as_ref()
+            .is_some_and(|cwd| cwd.trim().is_empty())
+        {
+            bail!("preview.cwd cannot be empty");
+        }
+        if self.preview.scroll_up.overlaps(&self.preview.scroll_down)
+            || self
+                .preview
+                .scroll_up
+                .contains_key(KeyCode::Char('c'), KeyModifiers::CONTROL)
+            || self
+                .preview
+                .scroll_down
+                .contains_key(KeyCode::Char('c'), KeyModifiers::CONTROL)
+        {
+            bail!("preview scroll bindings conflict with each other or Ctrl-C");
+        }
         if self.frecency.max_entries == 0 {
             bail!("frecency.max_entries must be greater than zero");
         }
@@ -946,6 +1037,8 @@ mod tests {
         assert_eq!(config.item.spacing, 0);
         assert_eq!(config.item.alternate_background, None);
         assert_eq!(config.theme.selection_background, "cyan");
+        assert!(!config.preview.enabled);
+        assert_eq!(config.preview.position, PreviewPosition::Right);
     }
 
     #[test]

@@ -1,0 +1,45 @@
+#:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json
+
+# Opt-in alternative to the bundled files palette. Run: vlm examples/files-preview.toml
+[search]
+title = "Files · Preview"
+placeholder = "Find a file..."
+
+[source]
+builtin = "files"
+
+[item]
+value = "$path"
+template = [
+  [
+    { token = "$icon", fg = "$icon_color", searchable = false },
+    " ",
+    { token = "$parent_prefix", fg = "#565f89" },
+    { token = "$name", bold = true },
+  ],
+]
+
+[preview]
+enabled = true
+position = "right"
+size = 55
+title = "File"
+# bat provides highlighting and truncates large files. Arguments are passed directly.
+command = [
+  "bat",
+  "--color=always",
+  "--decorations=always",
+  "--style=numbers",
+  "--line-range=:300",
+  "$path",
+]
+
+[theme]
+foreground = "#c0caf5"
+background = "#1a1b26"
+selection_foreground = "#c0caf5"
+selection_background = "#283457"
+border = "#565f89"
+mode_foreground = "#1a1b26"
+insert_mode_background = "#9ece6a"
+normal_mode_background = "#e0af68"
