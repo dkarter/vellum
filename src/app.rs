@@ -386,12 +386,22 @@ impl App {
 
     pub fn set_preview_content(&mut self, content: Arc<Text<'static>>) {
         self.preview_lines = content;
-        self.preview_offset = 0;
+        self.preview_offset = match self.preview_config.initial_scroll {
+            crate::config::PreviewInitialScroll::Top => 0,
+            crate::config::PreviewInitialScroll::Bottom => self.preview_max_offset(),
+        };
     }
 
     pub fn set_preview_height(&mut self, height: usize) {
+        let at_bottom = self.preview_config.initial_scroll
+            == crate::config::PreviewInitialScroll::Bottom
+            && self.preview_offset == self.preview_max_offset();
         self.preview_height = height.max(1);
-        self.preview_offset = self.preview_offset.min(self.preview_max_offset());
+        self.preview_offset = if at_bottom {
+            self.preview_max_offset()
+        } else {
+            self.preview_offset.min(self.preview_max_offset())
+        };
     }
 
     pub fn preview_max_offset(&self) -> usize {
