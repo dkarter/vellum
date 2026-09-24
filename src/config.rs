@@ -11,6 +11,8 @@ use crate::builtins::BuiltinSource;
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default)]
+    pub cwd: Option<String>,
+    #[serde(default)]
     pub search: SearchConfig,
     pub source: SourceConfig,
     #[serde(default)]
@@ -683,6 +685,9 @@ impl Config {
         {
             bail!("preview scroll bindings conflict with each other or Ctrl-C");
         }
+        if self.cwd.as_ref().is_some_and(|cwd| cwd.trim().is_empty()) {
+            bail!("cwd cannot be empty");
+        }
         if self.frecency.max_entries == 0 {
             bail!("frecency.max_entries must be greater than zero");
         }
@@ -1154,7 +1159,7 @@ mod tests {
     }
 
     #[test]
-    fn cfg_012_palette_can_select_filter_start_mode() {
+    fn cfg_015_palette_can_select_filter_start_mode() {
         let palette = format!("{MINIMAL}\n[input]\nstart_mode = 'filter'");
         let config =
             Config::parse_layered(Some("[input]\nstart_mode = 'normal'"), &palette).unwrap();

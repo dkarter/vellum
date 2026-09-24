@@ -236,6 +236,25 @@ fn sch_009_shared_schema_describes_standard_input_sources() {
 }
 
 #[test]
+fn sch_010_shared_schema_describes_palette_working_directories() {
+    let palette = read_json("schemas/vellum.schema.json");
+    let global = read_json("schemas/global.schema.json");
+    let shared = read_json("schemas/config-options.schema.json");
+    let cwd = &shared["properties"]["cwd"];
+
+    assert_eq!(palette["$ref"], "./config-options.schema.json");
+    assert_eq!(global["$ref"], palette["$ref"]);
+    assert_eq!(cwd["type"], "string");
+    assert_eq!(cwd["minLength"], 1);
+    assert!(
+        cwd["description"]
+            .as_str()
+            .unwrap()
+            .contains("environment variable")
+    );
+}
+
+#[test]
 fn itm_003_icon_agent_example_rewrites_known_agents_and_preserves_unknown_agents() {
     let example = fs::read_to_string("examples/herdr-agents-icons.toml").unwrap();
     let config = Config::parse(&example).unwrap();
