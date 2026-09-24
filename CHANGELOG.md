@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/dkarter/vellum/compare/v1.0.1...v1.1.0) (2026-09-24)
+
+
+### Features
+
+* add native previews and live theme browser ([9006cb3](https://github.com/dkarter/vellum/commit/9006cb33a7998b914630534284a6cb329512cf3f))
+* expand bundled theme variants ([9d17870](https://github.com/dkarter/vellum/commit/9d17870be73effddd28e417c0c8225f8a991814c))
+
+
+### Bug Fixes
+
+* remove duplicate theme preview status bar ([c826b7a](https://github.com/dkarter/vellum/commit/c826b7acd08a3d9283e2330202d31fc9648f78b4))
+
 ## [1.0.1](https://github.com/dkarter/vellum/compare/v1.0.0...v1.0.1) (2026-09-16)
 
 
