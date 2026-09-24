@@ -26,7 +26,7 @@ Runs `fd` directly, renders a compact filetype icon and path, and outputs the se
 
 ## Themes
 
-Run `vlm palettes sync`, then `vlm themes`. Browse Tokyo Night (Night, Storm, Moon, Day), Catppuccin (Latte, Frappé, Macchiato, Mocha), Dracula, Gruvbox, Nord, Rosé Pine, and Kanagawa variants. Highlighting a theme changes Vellum's colors immediately; the adjacent preview shows a complete sample palette and its color swatches without blending them into the list highlight. Enter saves the choice to the global `config.toml` while retaining other sections and comments. Cancel without saving using Esc or Ctrl-C. No theme name is printed to stdout.
+Run `vlm palettes sync`, then `vlm themes`. Browse Tokyo Night (Night, Storm, Moon, Day), Catppuccin (Latte, Frappé, Macchiato, Mocha), Dracula, Gruvbox (Dark and Light, with Hard and Soft contrast), Solarized (Dark and Light), One Dark, Everforest (Dark and Light), Nord, Rosé Pine, and Kanagawa variants. Highlighting a theme changes Vellum's colors immediately; the adjacent preview shows a complete sample palette and its color swatches without blending them into the list highlight. Enter saves the choice to the global `config.toml` while retaining other sections and comments. Cancel without saving using Esc or Ctrl-C. No theme name is printed to stdout.
 
 For an opt-in file preview, use [`examples/files-preview.toml`](https://github.com/dkarter/vellum/blob/main/examples/files-preview.toml). It uses `bat` to display the highlighted file with line numbers; install `bat` alongside `fd`, then run `vlm examples/files-preview.toml` from the repository root.
 

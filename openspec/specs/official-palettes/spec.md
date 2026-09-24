@@ -13,6 +13,7 @@ Vellum SHALL bundle a theme browser with modern theme variants. Browsing SHALL u
 - WHEN the highlight moves between theme variants
 - THEN the visible interface colors change without restarting or modifying disk
 - AND a full sample palette and color swatches appear beside the theme list
+- AND the catalog includes Gruvbox contrast variants, Solarized dark and light, One Dark, and Everforest dark and light
 
 #### Scenario: Accepting a theme updates global defaults {#PAL-019}
 

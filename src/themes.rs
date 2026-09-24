@@ -135,6 +135,26 @@ const PRESETS: &[Preset] = &[
         normal: "#fabd2f",
     },
     Preset {
+        id: "gruvbox-dark-hard",
+        label: "Gruvbox · Dark Hard",
+        background: "#1d2021",
+        foreground: "#ebdbb2",
+        accent: "#d79921",
+        border: "#665c54",
+        insert: "#b8bb26",
+        normal: "#fabd2f",
+    },
+    Preset {
+        id: "gruvbox-dark-soft",
+        label: "Gruvbox · Dark Soft",
+        background: "#32302f",
+        foreground: "#ebdbb2",
+        accent: "#d79921",
+        border: "#665c54",
+        insert: "#b8bb26",
+        normal: "#fabd2f",
+    },
+    Preset {
         id: "gruvbox-light",
         label: "Gruvbox · Light",
         background: "#fbf1c7",
@@ -143,6 +163,76 @@ const PRESETS: &[Preset] = &[
         border: "#a89984",
         insert: "#79740e",
         normal: "#b57614",
+    },
+    Preset {
+        id: "gruvbox-light-hard",
+        label: "Gruvbox · Light Hard",
+        background: "#f9f5d7",
+        foreground: "#3c3836",
+        accent: "#b57614",
+        border: "#a89984",
+        insert: "#79740e",
+        normal: "#b57614",
+    },
+    Preset {
+        id: "gruvbox-light-soft",
+        label: "Gruvbox · Light Soft",
+        background: "#f2e5bc",
+        foreground: "#3c3836",
+        accent: "#b57614",
+        border: "#a89984",
+        insert: "#79740e",
+        normal: "#b57614",
+    },
+    Preset {
+        id: "solarized-dark",
+        label: "Solarized · Dark",
+        background: "#002b36",
+        foreground: "#839496",
+        accent: "#268bd2",
+        border: "#586e75",
+        insert: "#859900",
+        normal: "#b58900",
+    },
+    Preset {
+        id: "solarized-light",
+        label: "Solarized · Light",
+        background: "#fdf6e3",
+        foreground: "#657b83",
+        accent: "#268bd2",
+        border: "#93a1a1",
+        insert: "#859900",
+        normal: "#b58900",
+    },
+    Preset {
+        id: "one-dark",
+        label: "One Dark",
+        background: "#282c34",
+        foreground: "#abb2bf",
+        accent: "#61afef",
+        border: "#5c6370",
+        insert: "#98c379",
+        normal: "#e5c07b",
+    },
+    Preset {
+        id: "everforest-dark",
+        label: "Everforest · Dark",
+        background: "#2d353b",
+        foreground: "#d3c6aa",
+        accent: "#7fbbb3",
+        border: "#859289",
+        insert: "#a7c080",
+        normal: "#dbbc7f",
+    },
+    Preset {
+        id: "everforest-light",
+        label: "Everforest · Light",
+        background: "#fdf6e3",
+        foreground: "#5c6a72",
+        accent: "#3a94c5",
+        border: "#939f91",
+        insert: "#8da101",
+        normal: "#dfa000",
     },
     Preset {
         id: "nord",
@@ -300,11 +390,41 @@ mod tests {
     #[test]
     fn pal_018_theme_catalog_has_modern_variants() {
         let items = items();
-        assert!(items.len() >= 16);
+        let mut ids = std::collections::HashSet::new();
         for item in &items {
-            assert!(theme(item["id"].as_str().unwrap()).is_some());
+            let id = item["id"].as_str().unwrap();
+            assert!(ids.insert(id), "duplicate theme id: {id}");
+            let theme = theme(id).unwrap();
+            for color in [
+                theme.background,
+                theme.foreground,
+                theme.selection_background,
+                theme.border,
+                theme.insert_mode_background,
+                theme.normal_mode_background,
+            ] {
+                assert!(
+                    color.starts_with('#')
+                        && color.len() == 7
+                        && color[1..].bytes().all(|b| b.is_ascii_hexdigit()),
+                    "invalid color for {id}: {color}"
+                );
+            }
         }
         assert_ne!(theme("tokyo-night"), theme("tokyo-day"));
+        for (id, background) in [
+            ("gruvbox-dark-hard", "#1d2021"),
+            ("gruvbox-dark-soft", "#32302f"),
+            ("gruvbox-light-hard", "#f9f5d7"),
+            ("gruvbox-light-soft", "#f2e5bc"),
+            ("solarized-dark", "#002b36"),
+            ("solarized-light", "#fdf6e3"),
+            ("one-dark", "#282c34"),
+            ("everforest-dark", "#2d353b"),
+            ("everforest-light", "#fdf6e3"),
+        ] {
+            assert_eq!(theme(id).unwrap().background, background);
+        }
         for (id, example) in [
             (
                 "tokyo-night",
