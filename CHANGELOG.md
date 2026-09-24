@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0](https://github.com/dkarter/vellum/compare/v1.3.0...v1.4.0) (2026-09-24)
+
+
+### Features
+
+* **preview:** support initial scroll at bottom ([#63](https://github.com/dkarter/vellum/issues/63)) ([b91c04b](https://github.com/dkarter/vellum/commit/b91c04b094245b9647a2735556a9f707b2e06243))
+
+
+### Bug Fixes
+
+* **deps:** update dependency @fission-ai/openspec to v1.13.2 ([#59](https://github.com/dkarter/vellum/issues/59)) ([68ebeb6](https://github.com/dkarter/vellum/commit/68ebeb630395a0fdc161ecb657b17f9f8ea1486e))
+
 ## [1.3.0](https://github.com/dkarter/vellum/compare/v1.2.0...v1.3.0) (2026-09-24)
 
 
