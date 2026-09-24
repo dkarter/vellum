@@ -94,6 +94,12 @@ fn sch_005_shared_schema_describes_palette_filters() {
         shared["properties"]["filters"]["properties"]["clear"]["default"],
         "a"
     );
+    assert!(
+        shared["properties"]["input"]["properties"]["start_mode"]["enum"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("filter"))
+    );
     assert_eq!(
         shared["$defs"]["filter-choice"]["required"],
         serde_json::json!(["key", "label", "source", "value"])

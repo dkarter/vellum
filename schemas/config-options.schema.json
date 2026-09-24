@@ -69,7 +69,7 @@
       "additionalProperties": false,
       "properties": {
         "vim": { "type": "boolean", "default": true },
-        "start_mode": { "enum": ["insert", "normal"], "default": "insert" }
+        "start_mode": { "description": "Initial input mode. Filter opens the choice menu when filters have choices, then Escape returns to insert editing.", "enum": ["insert", "normal", "filter"], "default": "insert" }
       }
     },
     "frecency": {

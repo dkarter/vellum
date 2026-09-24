@@ -51,6 +51,11 @@ icon = "●"
 fg = "yellow"
 ```
 
-Press Ctrl-G, then a choice key. Press the active choice again or the clear key to show all items. Another choice replaces the active filter. Escape closes filter mode without changing Vim mode or cancelling. Filter sources support dot paths such as `metadata.state`.
+To open a palette with the choice keys immediately available, set `start_mode = "filter"` in its `[input]` section. This starts in filter mode when choices are configured, with insert mode underneath. The default `start_mode = "insert"` requires Ctrl-G before a choice key. Press the active choice again or the clear key to show all items. Another choice replaces the active filter. Escape closes filter mode and returns to insert editing without cancelling; search then combines with the active filter. With no filter choices, `start_mode = "filter"` falls back to insert editing. Filter sources support dot paths such as `metadata.state`.
+
+```toml
+[input]
+start_mode = "filter"
+```
 
 Choice keys cannot collide with available editing commands while filter mode is open. List navigation remains active.

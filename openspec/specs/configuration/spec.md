@@ -126,3 +126,13 @@ sources and actions using either a literal path or an environment variable.
 - GIVEN a palette with an empty path, unset environment variable, or inaccessible working directory
 - WHEN Vellum validates or starts the palette
 - THEN it exits before running the source and identifies the invalid working directory
+
+### Requirement: Select the initial filter mode
+
+Vellum SHALL allow a palette to start in exact-match filter mode when filter choices are configured.
+
+#### Scenario: Palette selects filter startup mode {#CFG-015}
+
+- GIVEN global input defaults and a palette with `input.start_mode = "filter"`
+- WHEN Vellum parses the layered configuration
+- THEN the palette's filter startup mode overrides the global input start mode
