@@ -1022,6 +1022,8 @@ mod tests {
         assert!(output.contains("Search workspaces"));
         assert!(output.contains("dotfiles"));
         assert!(output.contains("▪▪"));
+        assert_eq!(output.matches("INSERT").count(), 1);
+        assert!(!output.contains("3/3  enter select"));
     }
 
     #[test]

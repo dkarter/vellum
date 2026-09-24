@@ -417,11 +417,10 @@ fn render_theme_showcase(frame: &mut Frame, area: Rect, app: &App, theme: &Theme
         return;
     }
     let swatch_height = if area.height >= 10 { 2 } else { 1 };
-    let [search, results, swatches, footer] = Layout::vertical([
+    let [search, results, swatches] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Fill(1),
         Constraint::Length(swatch_height),
-        Constraint::Length(1),
     ])
     .areas(area);
     let search_block = Block::new()
@@ -487,22 +486,6 @@ fn render_theme_showcase(frame: &mut Frame, area: Rect, app: &App, theme: &Theme
             height: 1,
             ..swatches
         },
-    );
-    frame.render_widget(
-        Line::from(vec![
-            Span::styled(
-                " INSERT ",
-                Style::new()
-                    .fg(color(&theme.mode_foreground))
-                    .bg(color(&theme.insert_mode_background))
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "  3/3  enter select  esc cancel",
-                Style::new().fg(color(&theme.border)),
-            ),
-        ]),
-        footer,
     );
 }
 
