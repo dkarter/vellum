@@ -617,9 +617,11 @@ fn render_preview_line(frame: &mut Frame, line: &Line<'_>, mut area: Rect) {
         }
         let mut width = 0;
         let mut end = 0;
+        let mut clipped = false;
         for (index, grapheme) in span.content.grapheme_indices(true) {
             let grapheme_width = Line::from(grapheme).width();
             if width + grapheme_width > area.width as usize {
+                clipped = true;
                 break;
             }
             width += grapheme_width;
@@ -629,6 +631,9 @@ fn render_preview_line(frame: &mut Frame, line: &Line<'_>, mut area: Rect) {
             frame.render_widget(Span::styled(&span.content[..end], span.style), area);
             area.x += width as u16;
             area.width -= width as u16;
+        }
+        if clipped {
+            break;
         }
     }
 }
@@ -1036,6 +1041,21 @@ mod tests {
         assert_eq!(buffer[(area.x + 1, area.y + 1)].symbol(), "x");
         assert_eq!(buffer[(area.x + 1, area.y + 1)].fg, Color::Indexed(1));
         assert_eq!(buffer[(area.right() - 2, area.y + 1)].symbol(), "x");
+    }
+
+    #[test]
+    fn ui_020_wide_grapheme_does_not_reorder_later_ansi_spans() {
+        let mut terminal = Terminal::new(TestBackend::new(20, 1)).unwrap();
+        let line = Line::from(vec![
+            Span::raw(format!("{}界", "a".repeat(19))),
+            Span::styled("X", Style::new().fg(Color::Red)),
+        ]);
+        terminal
+            .draw(|frame| render_preview_line(frame, &line, Rect::new(0, 0, 20, 1)))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        assert_eq!(buffer[(18, 0)].symbol(), "a");
+        assert_eq!(buffer[(19, 0)].symbol(), " ");
     }
 
     #[test]
