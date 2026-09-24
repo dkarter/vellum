@@ -69,3 +69,9 @@ Vellum SHALL configure Taplo to use the bundled schema for example TOML files.
 - GIVEN the global and palette schema entry points and their shared option definitions
 - WHEN their source fields are inspected
 - THEN both schemas document `source.stdin` as a one-shot source alongside command, built-in, and file sources
+
+#### Scenario: Shared schema describes palette working directories {#SCH-010}
+
+- GIVEN the global and palette schema entry points and their shared option definitions
+- WHEN their top-level fields are inspected
+- THEN both schemas document a nonempty working directory path or environment-variable reference

@@ -6,6 +6,11 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "cwd": {
+      "description": "Working directory inherited by sources and actions without their own cwd. Use a literal path or an exact environment variable reference such as $HERDR_ACTIVE_PANE_CWD.",
+      "type": "string",
+      "minLength": 1
+    },
     "search": {
       "type": "object",
       "additionalProperties": false,
