@@ -4,10 +4,10 @@ vlm = "cargo run --release --bin vlm --"
 [tools]
 "npm:@fission-ai/openspec" = { version = "latest", aube_args = "--deny-build=@fission-ai/openspec" }
 aube = "latest"
-node = "24"
+node = "26"
 ripgrep = "latest"
 rust = { version = "1.98.1", mr_boxington = true }
-mr-boxington = "1.11.0"
+mr-boxington = "1.15.0"
 
 [settings]
 npm.package_manager = "aube"
