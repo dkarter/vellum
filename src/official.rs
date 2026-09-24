@@ -170,6 +170,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(installed, palette.contents);
+            assert!(installed.starts_with("#:schema https://raw.githubusercontent.com/"));
         }
         fs::remove_dir_all(root).unwrap();
     }

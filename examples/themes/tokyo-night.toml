@@ -1,4 +1,4 @@
-#:schema ../../schemas/global.schema.json
+#:schema ../../schemas/vellum.schema.json
 
 [theme]
 foreground = "#c0caf5"

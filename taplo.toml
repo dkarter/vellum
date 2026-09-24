@@ -8,4 +8,4 @@ path = "schemas/vellum.schema.json"
 include = ["examples/global.toml"]
 
 [rule.schema]
-path = "schemas/global.schema.json"
+path = "schemas/vellum.schema.json"

@@ -42,7 +42,7 @@ Vellum SHALL install bundled palettes into the XDG palette directory without sil
 
 - GIVEN an empty injected configuration root
 - WHEN official palettes are synchronized
-- THEN every bundled palette is installed with its embedded contents
+- THEN every bundled palette is installed with its embedded contents, including the published Vellum schema URL usable when copied directly
 
 #### Scenario: Overwrite refuses symbolic-link targets {#PAL-009}
 

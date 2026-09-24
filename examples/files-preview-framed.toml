@@ -1,4 +1,4 @@
-#:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json
+#:schema ../schemas/vellum.schema.json
 
 # A boxed, bottom-placed alternative: vlm examples/files-preview-framed.toml
 [search]

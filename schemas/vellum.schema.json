@@ -1,6 +1,410 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json",
   "title": "Vellum configuration",
-  "description": "An individual Vellum palette supporting command, built-in, file-backed, or standard-input sources.",
-  "$ref": "./config-options.schema.json"
+  "description": "Vellum global and palette configuration supporting command, built-in, file-backed, and standard-input sources.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "cwd": {
+      "description": "Working directory inherited by sources and actions without their own cwd. Use a literal path or an exact environment variable reference such as $HERDR_ACTIVE_PANE_CWD.",
+      "type": "string",
+      "minLength": 1
+    },
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "title": { "type": "string", "default": "Vellum" },
+        "placeholder": { "type": "string", "default": "Search..." }
+      }
+    },
+    "preview": {
+      "description": "Optional asynchronous command preview for the selected item.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "position": { "enum": ["left", "right", "top", "bottom"], "default": "right" },
+        "size": { "type": "integer", "minimum": 10, "maximum": 90, "default": 50 },
+        "title": { "type": "string", "default": "Preview" },
+        "border": { "description": "Pane chrome: separator on the edge facing results, a full box, or none.", "enum": ["separator", "full", "none"], "default": "separator" },
+        "scrollbar": { "type": "boolean", "default": true },
+        "scroll_up": { "$ref": "#/$defs/bindings", "default": "ctrl-u" },
+        "scroll_down": { "$ref": "#/$defs/bindings", "default": "ctrl-d" },
+        "command": { "description": "Direct argv command. An argument consisting of $field or $nested.field is replaced with the selected scalar field.", "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "cwd": { "description": "Working directory; supports a selected scalar field as $field or $nested.field.", "type": "string", "minLength": 1 },
+        "timeout_ms": { "type": "integer", "minimum": 1, "default": 2000 }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cmd": {
+          "description": "Shell command producing a JSON array or NDJSON objects. Mutually exclusive with builtin, file, and stdin.",
+          "type": "string",
+          "minLength": 1
+        },
+        "builtin": {
+          "description": "Maintained in-process source adapter. Mutually exclusive with cmd, file, and stdin.",
+          "enum": ["herdr-workspaces", "herdr-agents", "files", "themes"]
+        },
+        "file": {
+          "description": "Path to a JSON, JSONC, YAML, or TOML item file. Relative paths resolve from the configuration file that declares them. Mutually exclusive with cmd, builtin, and stdin.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\.(json|jsonc|yaml|yml|toml)$"
+        },
+        "stdin": {
+          "description": "Read a one-shot JSON array or NDJSON stream from standard input. Mutually exclusive with cmd, builtin, and file; incompatible with refresh.",
+          "const": true
+        },
+        "refresh_ms": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "vim": { "type": "boolean", "default": true },
+        "start_mode": { "description": "Initial input mode. Filter opens the choice menu when filters have choices, then Escape returns to insert editing.", "enum": ["insert", "normal", "filter"], "default": "insert" }
+      }
+    },
+    "frecency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "max_entries": { "type": "integer", "minimum": 1, "default": 1000 }
+      }
+    },
+    "keybindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "down": { "$ref": "#/$defs/bindings" },
+        "up": { "$ref": "#/$defs/bindings" },
+        "page_down": { "$ref": "#/$defs/bindings", "default": "ctrl-d" },
+        "page_up": { "$ref": "#/$defs/bindings", "default": "ctrl-u" },
+        "accept": { "$ref": "#/$defs/bindings" },
+        "cancel": { "$ref": "#/$defs/bindings" },
+        "forward": { "$ref": "#/$defs/bindings" },
+        "backward": { "$ref": "#/$defs/bindings" },
+        "start": { "$ref": "#/$defs/bindings" },
+        "end": { "$ref": "#/$defs/bindings" },
+        "delete_word": { "$ref": "#/$defs/bindings" }
+      }
+    },
+    "filters": {
+      "description": "Optional exact-match filters entered through a dedicated mode.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Short name shown before compact filter keys.",
+          "type": "string",
+          "minLength": 1,
+          "default": "filter"
+        },
+        "all_label": {
+          "description": "Expanded label for the all-items choice in filter mode.",
+          "type": "string",
+          "minLength": 1,
+          "default": "all"
+        },
+        "separator": {
+          "description": "Text between filter choices in the search border.",
+          "type": "string",
+          "default": "|"
+        },
+        "mode": { "$ref": "#/$defs/bindings", "default": "ctrl-g" },
+        "clear": { "$ref": "#/$defs/bindings", "default": "a" },
+        "choices": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/filter-choice" },
+          "default": []
+        }
+      }
+    },
+    "actions": {
+      "description": "Generic commands that can run for the selected source item.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "description": "Name of the action invoked by the accept binding. Without this, accept returns item.value.",
+          "type": "string",
+          "minLength": 1
+        },
+        "menu": { "$ref": "#/$defs/bindings", "default": "ctrl-a" },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/action" },
+          "default": []
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "border": { "type": "boolean", "default": false },
+        "box_title": { "description": "Optional title for a full border around the result list.", "type": "string" },
+        "padding": { "type": "integer", "minimum": 0, "maximum": 65535, "default": 1 },
+        "spacing": { "type": "integer", "minimum": 0, "maximum": 65535, "default": 0 },
+        "alternate_background": {
+          "description": "Background color for odd visible list entries.",
+          "type": "string"
+        },
+        "value": { "type": "string", "minLength": 1 },
+        "template": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/segment" },
+            "minItems": 1
+          },
+          "minItems": 1
+        },
+        "tokens": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/token" }
+        }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "foreground": { "type": "string" },
+        "background": { "type": "string" },
+        "selection_foreground": { "type": "string" },
+        "selection_background": { "type": "string" },
+        "border": { "type": "string" },
+        "mode_foreground": { "type": "string", "default": "black" },
+        "insert_mode_background": { "type": "string", "default": "green" },
+        "normal_mode_background": { "type": "string", "default": "yellow" }
+      }
+    }
+  },
+  "$defs": {
+    "bindings": {
+      "description": "One key, multiple keys, or false to disable this action.",
+      "oneOf": [
+        { "const": false },
+        {
+          "type": "string",
+          "pattern": "^(ctrl-)?(up|down|left|right|home|end|enter|esc|escape|backspace|delete|.)$"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(ctrl-)?(up|down|left|right|home|end|enter|esc|escape|backspace|delete|.)$"
+          }
+        }
+      ]
+    },
+    "filter-choice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "source", "value"],
+      "properties": {
+        "key": { "$ref": "#/$defs/filter-choice-bindings" },
+        "label": { "type": "string", "minLength": 1 },
+        "source": {
+          "description": "Source field or dot path compared with value.",
+          "type": "string",
+          "minLength": 1
+        },
+        "value": { "type": "string" },
+        "icon": {
+          "description": "Optional icon shown with this choice when active.",
+          "type": "string",
+          "default": ""
+        },
+        "fg": {
+          "description": "Optional active-choice foreground color.",
+          "type": "string"
+        }
+      }
+    },
+    "filter-choice-bindings": {
+      "description": "One or more keys that activate a filter choice.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^(ctrl-)?(up|down|left|right|home|end|enter|esc|escape|backspace|delete|.)$"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(ctrl-)?(up|down|left|right|home|end|enter|esc|escape|backspace|delete|.)$"
+          },
+          "minItems": 1
+        }
+      ]
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "label"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "icon": {
+          "description": "Optional icon displayed before the action label.",
+          "type": "string",
+          "default": ""
+        },
+        "description": {
+          "description": "Optional secondary text displayed below the action label and included in fuzzy matching.",
+          "type": "string",
+          "default": ""
+        },
+        "key": { "$ref": "#/$defs/bindings", "default": false },
+        "command": {
+          "description": "Argv array executed directly. An argument consisting of $field or $nested.field is replaced with one selected scalar field.",
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "shell": {
+          "description": "Explicit opt-in shell command executed with sh -c. Item fields are not interpolated.",
+          "type": "string",
+          "minLength": 1
+        },
+        "cwd": {
+          "description": "Working directory for the action. A value consisting of $field or $nested.field is replaced with one selected scalar field.",
+          "type": "string",
+          "minLength": 1
+        },
+        "availability": { "$ref": "#/$defs/action-availability" },
+        "when": {
+          "description": "Conditions that must all match the selected item before this action is available.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/action-condition" },
+          "default": []
+        },
+        "on_success": { "enum": ["exit", "refresh"], "default": "exit" }
+      },
+      "oneOf": [
+        { "required": ["command"], "not": { "required": ["shell"] } },
+        { "required": ["shell"], "not": { "required": ["command"] } }
+      ]
+    },
+    "action-condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field"],
+      "properties": {
+        "field": { "type": "string", "minLength": 1 },
+        "equals": { "type": ["string", "number", "integer", "boolean"] },
+        "is_set": {
+          "description": "Whether the field must exist with a non-null value.",
+          "type": "boolean"
+        }
+      },
+      "oneOf": [
+        { "required": ["equals"], "not": { "required": ["is_set"] } },
+        { "required": ["is_set"], "not": { "required": ["equals"] } }
+      ]
+    },
+    "action-availability": {
+      "description": "Asynchronous command probe that gates action availability. A zero exit status makes the action available, and equivalent interpolated commands, working directories, and timeout policies share cached results.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command"],
+      "properties": {
+        "command": {
+          "description": "Argv array executed directly with stdin, stdout, and stderr disconnected.",
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "cwd": {
+          "description": "Working directory for the probe. A value consisting of $field or $nested.field is replaced with one selected scalar field.",
+          "type": "string",
+          "minLength": 1
+        },
+        "cache_ms": {
+          "description": "Duration in milliseconds to reuse successful or unsuccessful results for an equivalent interpolated command and working directory.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 30000
+        },
+        "timeout_ms": {
+          "description": "Maximum probe runtime in milliseconds before the process is terminated and treated as unavailable.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 5000
+        }
+      }
+    },
+    "segment": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["token"],
+          "properties": {
+            "token": { "type": "string" },
+            "fg": { "type": "string" },
+            "bg": { "type": "string" },
+            "bold": { "type": "boolean", "default": false },
+            "searchable": { "type": "boolean", "default": true },
+            "align": { "enum": ["left", "right"], "default": "left" }
+          }
+        },
+        {
+          "description": "Render one non-empty token for every element in an array field. Object fields resolve directly, scalar elements resolve through $value, and outer item fields resolve through $parent.field.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["for_each", "token"],
+          "properties": {
+            "for_each": { "type": "string", "minLength": 1 },
+            "token": { "type": "string" },
+            "separator": { "type": "string", "default": "" },
+            "unique": { "type": "boolean", "default": false },
+            "fg": { "type": "string" },
+            "bg": { "type": "string" },
+            "bold": { "type": "boolean", "default": false },
+            "searchable": { "type": "boolean", "default": true },
+            "align": { "enum": ["left", "right"], "default": "left" }
+          }
+        }
+      ]
+    },
+    "token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source"],
+      "properties": {
+        "name": { "type": "string" },
+        "source": { "type": "string" },
+        "when": { "type": "array", "items": { "type": "string" } },
+        "text": { "type": "string" },
+        "fg": { "type": "string" },
+        "bg": { "type": "string" },
+        "bold": { "type": "boolean", "default": false },
+        "animation_fps": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "animation_frames": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["animation_fps"] },
+          "then": { "required": ["animation_frames"] }
+        }
+      ]
+    }
+  }
 }

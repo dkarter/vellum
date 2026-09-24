@@ -15,7 +15,12 @@ fn sch_001_bundled_schema_is_valid_json() {
     .expect("schema should be valid JSON");
 
     assert_eq!(schema["title"], "Vellum configuration");
-    assert_eq!(schema["$ref"], "./config-options.schema.json");
+    assert!(schema["properties"]["input"]["properties"]["start_mode"].is_object());
+    assert!(schema.get("$ref").is_none());
+    assert_eq!(
+        schema["$id"],
+        "https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json"
+    );
 }
 
 #[test]
@@ -27,6 +32,15 @@ fn sch_002_taplo_rule_references_bundled_schema() {
     assert_eq!(
         config["rule"][0]["schema"]["path"].as_str(),
         Some("schemas/vellum.schema.json")
+    );
+    assert_eq!(
+        config["rule"][1]["schema"]["path"].as_str(),
+        Some("schemas/vellum.schema.json")
+    );
+    assert!(
+        fs::read_to_string("palettes/herdr-agents.toml")
+            .unwrap()
+            .starts_with("#:schema https://raw.githubusercontent.com/dkarter/vellum/refs/heads/main/schemas/vellum.schema.json\n")
     );
 }
 
@@ -45,42 +59,55 @@ fn meta_002_spec_runner_resolves_all_file_scenarios() {
 }
 
 #[test]
-fn sch_003_global_configuration_has_a_dedicated_schema() {
-    let schema: Value = serde_json::from_str(
-        &fs::read_to_string("schemas/global.schema.json")
-            .expect("global schema should be readable"),
-    )
-    .expect("global schema should be valid JSON");
+fn sch_003_global_configuration_uses_vellum_schema() {
+    let schema = read_json("schemas/vellum.schema.json");
     let example = fs::read_to_string("examples/global.toml").unwrap();
 
-    assert_eq!(schema["$ref"], "./config-options.schema.json");
-    assert!(example.starts_with("#:schema ../schemas/global.schema.json"));
+    assert!(example.starts_with("#:schema ../schemas/vellum.schema.json"));
+    assert!(schema["properties"]["theme"].is_object());
 }
 
 #[test]
-fn sch_004_global_and_palette_schemas_share_option_definitions() {
-    let palette = read_json("schemas/vellum.schema.json");
-    let global = read_json("schemas/global.schema.json");
-    let shared = read_json("schemas/config-options.schema.json");
+fn sch_004_one_schema_serves_global_and_palette_configuration() {
+    fn assert_local_refs(value: &Value) {
+        match value {
+            Value::Object(fields) => {
+                if let Some(reference) = fields.get("$ref").and_then(Value::as_str) {
+                    assert!(
+                        reference.starts_with("#/$defs/"),
+                        "external reference: {reference}"
+                    );
+                }
+                for value in fields.values() {
+                    assert_local_refs(value);
+                }
+            }
+            Value::Array(values) => {
+                for value in values {
+                    assert_local_refs(value);
+                }
+            }
+            _ => {}
+        }
+    }
 
-    assert_eq!(palette["$ref"], "./config-options.schema.json");
-    assert_eq!(global["$ref"], palette["$ref"]);
-    assert!(palette.get("$id").is_none());
-    assert!(global.get("$id").is_none());
-    assert!(shared["properties"]["search"]["properties"]["title"].is_object());
-    assert!(shared["properties"]["theme"]["properties"]["insert_mode_background"].is_object());
+    let schema = read_json("schemas/vellum.schema.json");
+
+    assert_local_refs(&schema);
+    assert!(!std::path::Path::new("schemas/global.schema.json").exists());
+    assert!(!std::path::Path::new("schemas/config-options.schema.json").exists());
+    assert!(schema["properties"]["search"]["properties"]["title"].is_object());
+    assert!(schema["properties"]["theme"]["properties"]["insert_mode_background"].is_object());
     assert_eq!(
-        shared["properties"]["item"]["properties"]["spacing"]["default"],
+        schema["properties"]["item"]["properties"]["spacing"]["default"],
         0
     );
-    assert!(shared["properties"]["item"]["properties"]["alternate_background"].is_object());
+    assert!(schema["properties"]["item"]["properties"]["alternate_background"].is_object());
 }
 
 #[test]
 fn sch_005_shared_schema_describes_palette_filters() {
-    let shared: Value =
-        serde_json::from_str(&fs::read_to_string("schemas/config-options.schema.json").unwrap())
-            .unwrap();
+    let shared = read_json("schemas/vellum.schema.json");
 
     assert_eq!(
         shared["properties"]["filters"]["properties"]["label"]["default"],
@@ -126,9 +153,7 @@ fn sch_005_shared_schema_describes_palette_filters() {
 
 #[test]
 fn sch_006_shared_schema_describes_native_actions() {
-    let shared: Value =
-        serde_json::from_str(&fs::read_to_string("schemas/config-options.schema.json").unwrap())
-            .unwrap();
+    let shared = read_json("schemas/vellum.schema.json");
 
     let actions = &shared["properties"]["actions"]["properties"];
     assert_eq!(actions["menu"]["default"], "ctrl-a");
@@ -166,9 +191,7 @@ fn sch_006_shared_schema_describes_native_actions() {
 
 #[test]
 fn sch_007_shared_schema_describes_repeated_template_segments() {
-    let shared: Value =
-        serde_json::from_str(&fs::read_to_string("schemas/config-options.schema.json").unwrap())
-            .unwrap();
+    let shared = read_json("schemas/vellum.schema.json");
     let repeated = &shared["$defs"]["segment"]["oneOf"][2];
 
     assert_eq!(
@@ -192,19 +215,11 @@ fn sch_007_shared_schema_describes_repeated_template_segments() {
 
 #[test]
 fn sch_008_shared_schema_describes_file_backed_sources() {
-    let palette = read_json("schemas/vellum.schema.json");
-    let global = read_json("schemas/global.schema.json");
-    let shared = read_json("schemas/config-options.schema.json");
-    let file = &shared["properties"]["source"]["properties"]["file"];
+    let schema = read_json("schemas/vellum.schema.json");
+    let file = &schema["properties"]["source"]["properties"]["file"];
 
     assert!(
-        palette["description"]
-            .as_str()
-            .unwrap()
-            .contains("file-backed")
-    );
-    assert!(
-        global["description"]
+        schema["description"]
             .as_str()
             .unwrap()
             .contains("file-backed")
@@ -222,19 +237,11 @@ fn sch_008_shared_schema_describes_file_backed_sources() {
 
 #[test]
 fn sch_009_shared_schema_describes_standard_input_sources() {
-    let palette = read_json("schemas/vellum.schema.json");
-    let global = read_json("schemas/global.schema.json");
-    let shared = read_json("schemas/config-options.schema.json");
-    let stdin = &shared["properties"]["source"]["properties"]["stdin"];
+    let schema = read_json("schemas/vellum.schema.json");
+    let stdin = &schema["properties"]["source"]["properties"]["stdin"];
 
     assert!(
-        palette["description"]
-            .as_str()
-            .unwrap()
-            .contains("standard-input")
-    );
-    assert!(
-        global["description"]
+        schema["description"]
             .as_str()
             .unwrap()
             .contains("standard-input")
@@ -245,13 +252,9 @@ fn sch_009_shared_schema_describes_standard_input_sources() {
 
 #[test]
 fn sch_010_shared_schema_describes_palette_working_directories() {
-    let palette = read_json("schemas/vellum.schema.json");
-    let global = read_json("schemas/global.schema.json");
-    let shared = read_json("schemas/config-options.schema.json");
-    let cwd = &shared["properties"]["cwd"];
+    let schema = read_json("schemas/vellum.schema.json");
+    let cwd = &schema["properties"]["cwd"];
 
-    assert_eq!(palette["$ref"], "./config-options.schema.json");
-    assert_eq!(global["$ref"], palette["$ref"]);
     assert_eq!(cwd["type"], "string");
     assert_eq!(cwd["minLength"], 1);
     assert!(
