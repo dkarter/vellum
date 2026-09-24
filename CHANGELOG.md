@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.0](https://github.com/dkarter/vellum/compare/v1.1.0...v1.2.0) (2026-09-24)
+
+
+### Features
+
+* add animated filter selector with theme-aware highlights ([5aee01a](https://github.com/dkarter/vellum/commit/5aee01a066264f58c1887c34d3f5d96bcda9ce5e))
+* allow palettes to start in filter mode ([#55](https://github.com/dkarter/vellum/issues/55)) ([3f7c9a7](https://github.com/dkarter/vellum/commit/3f7c9a7899e13a207d08b43b9696cae25d3160a8))
+* configure palette working directory ([#43](https://github.com/dkarter/vellum/issues/43)) ([947318a](https://github.com/dkarter/vellum/commit/947318a2f4cf177476f1ac281bda9b5236193df2))
+* reflect query-aware filter availability in footer ([f141089](https://github.com/dkarter/vellum/commit/f1410890b279ffc8ad7c4259c2d71049780b8021))
+
+
+### Bug Fixes
+
+* **deps:** update rust crate toml_edit to 0.25 ([#58](https://github.com/dkarter/vellum/issues/58)) ([ceaff65](https://github.com/dkarter/vellum/commit/ceaff65a1629cf0f35e7aa46e102281e438351af))
+
 ## [1.1.0](https://github.com/dkarter/vellum/compare/v1.0.1...v1.1.0) (2026-09-24)
 
 

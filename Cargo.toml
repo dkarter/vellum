@@ -1,6 +1,6 @@
 [package]
 name = "vellum"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2024"
 description = "A fast, customizable terminal multiplexer menu"
 license = "MIT"
