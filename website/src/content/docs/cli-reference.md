@@ -8,6 +8,7 @@ description: Vellum commands, path resolution, output behavior, and environment 
 ```text
 vlm [PALETTE] [SOURCE OPTIONS]
 vlm palettes sync [--overwrite]
+vlm --completions=SHELL
 vlm -h | --help
 vlm -V | --version
 ```
@@ -61,6 +62,18 @@ See [previews](../previews/) for command and theme configuration.
 Copy official palettes into `<config-root>/palettes`. Existing paths are reported and skipped.
 
 `--overwrite` replaces regular files with current bundled content. Symlink targets are refused.
+
+## Shell completions
+
+Generate a completion script with `vlm --completions=SHELL`, where `SHELL` is `bash`, `zsh`, `fish`, `elvish`, `nu`, or `powershell`. For example:
+
+```sh
+vlm --completions=bash > ~/.local/share/bash-completion/completions/vlm
+vlm --completions=fish > ~/.config/fish/completions/vlm.fish
+vlm --completions=zsh > ~/.local/share/zsh/site-functions/_vlm
+```
+
+For zsh, add `fpath+=(~/.local/share/zsh/site-functions)` before `compinit` in your shell setup. The scripts call `vlm` only when completing; palette suggestions come from TOML filenames in `<config-root>/palettes` without reading their contents.
 
 ## Process output
 

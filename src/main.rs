@@ -31,6 +31,8 @@ use vellum::{
     official, preview, source, themes, ui,
 };
 
+mod completions;
+
 const REFRESH_POLL_RATE: Duration = Duration::from_millis(50);
 const INITIAL_SOURCE_POLL_RATE: Duration = Duration::from_millis(5);
 const MAX_EVENTS_PER_TICK: usize = 64;
@@ -80,6 +82,25 @@ impl Drop for SourceWorker {
 }
 
 fn main() -> Result<()> {
+    // Completion requests do not load configuration or initialize the terminal.
+    let mut args = env::args_os().skip(1);
+    if let Some(first) = args.next() {
+        if first == "__complete_word__" {
+            let request = std::iter::once(first).chain(args).collect::<Vec<_>>();
+            if let Some(answer) = completions::request(&request) {
+                print!("{answer}");
+                return Ok(());
+            }
+        } else if let Some(shell) = first
+            .to_str()
+            .and_then(|s| s.strip_prefix("--completions="))
+            && args.next().is_none()
+        {
+            let script = completions::script(shell).context("unsupported completion shell")?;
+            print!("{script}");
+            return Ok(());
+        }
+    }
     let run_request = match cli(env::args().skip(1))? {
         Cli::Run(options) => options,
         Cli::PalettesSync { overwrite } => {
@@ -992,7 +1013,7 @@ fn palette_identity(path: &std::path::Path) -> String {
 
 fn print_help() {
     println!(
-        "Vellum {}\n\nUsage:\n  vlm [PALETTE] [SOURCE OPTIONS]\n  vlm palettes sync [--overwrite]\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nCommands:\n  palettes sync  Install bundled palettes without replacing existing files\n\nSource options:\n  --stdin                 Auto-detect plain lines, JSON, or NDJSON from standard input\n  --lines FIELD           Wrap each nonempty input line as {{FIELD: line}}\n  --field TARGET=SOURCE   Copy a dotted source field to a target field (repeatable)\n  --jq FILTER             Transform standard-input JSON through jq\n\nOptions:\n  --preview                 Enable the configured preview\n  --no-preview              Hide the preview\n  --preview-position PLACE   Enable preview at left, right, top, or bottom\n  -1, --select-1            Accept the initial result without opening the menu when exactly one exists\n  --overwrite               Replace existing official palette files during sync\n  -h, --help                Print help\n  -V, --version             Print version",
+        "Vellum {}\n\nUsage:\n  vlm [PALETTE] [SOURCE OPTIONS]\n  vlm palettes sync [--overwrite]\n  vlm --completions=SHELL\n\nArguments:\n  PALETTE  Palette name or TOML path [default: default]\n\nCommands:\n  palettes sync  Install bundled palettes without replacing existing files\n\nSource options:\n  --stdin                 Auto-detect plain lines, JSON, or NDJSON from standard input\n  --lines FIELD           Wrap each nonempty input line as {{FIELD: line}}\n  --field TARGET=SOURCE   Copy a dotted source field to a target field (repeatable)\n  --jq FILTER             Transform standard-input JSON through jq\n\nOptions:\n  --preview                 Enable the configured preview\n  --no-preview              Hide the preview\n  --preview-position PLACE   Enable preview at left, right, top, or bottom\n  -1, --select-1            Accept the initial result without opening the menu when exactly one exists\n  --overwrite               Replace existing official palette files during sync\n  --completions=SHELL       Print a shell completion script\n  -h, --help                Print help\n  -V, --version             Print version",
         env!("CARGO_PKG_VERSION")
     );
 }

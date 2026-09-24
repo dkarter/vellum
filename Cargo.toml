@@ -5,7 +5,7 @@ edition = "2024"
 description = "A fast, customizable terminal multiplexer menu"
 license = "MIT"
 repository = "https://github.com/dorian/vellum"
-rust-version = "1.88"
+rust-version = "1.91"
 
 [[bin]]
 name = "vlm"
@@ -24,6 +24,7 @@ serde_json = "1.0"
 toml = "1.0"
 toml_edit = "0.25"
 unicode-segmentation = "1.12"
+usage = { version = "6", package = "usage-rs", features = ["completions"] }
 
 [dev-dependencies]
 pretty_assertions = "1.4"

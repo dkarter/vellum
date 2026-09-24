@@ -6,6 +6,18 @@ Resolve palette names and paths, expose help, and reject ambiguous invocation.
 
 ## Requirements
 
+### Requirement: Complete commands and palette names
+
+Vellum SHALL generate shell completion scripts with usage-rs and answer completion requests without loading palette contents, starting sources, or initializing the terminal. Palette names SHALL reflect TOML files in the configured palette directory.
+
+#### Scenario: Shell completion scripts and live palette candidates {#CLI-011}
+
+- GIVEN a configured palette directory containing TOML palettes and other entries
+- WHEN a supported shell requests completions for `vlm`
+- THEN the generated script invokes Vellum's completion endpoint
+- AND the candidates include palette names, applicable options, and palette subcommands
+- AND malformed palette contents do not prevent completion
+
 ### Requirement: Override preview from the command line
 
 Vellum SHALL allow enabling, disabling, and placing a configured preview for one invocation.
