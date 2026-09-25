@@ -256,16 +256,9 @@ impl App {
             if key.code == KeyCode::Esc || self.filter_config.mode.matches(key) {
                 self.set_filter_mode(false);
             } else if key.code == KeyCode::Tab || key.code == KeyCode::BackTab {
-                let count = self.filter_config.choices.len() + 1;
-                let position = self.active_filter.map_or(0, |index| index + 1);
-                let next = if key.code == KeyCode::BackTab
-                    || key.modifiers.contains(KeyModifiers::SHIFT)
-                {
-                    (position + count - 1) % count
-                } else {
-                    (position + 1) % count
-                };
-                self.set_filter(next.checked_sub(1));
+                self.cycle_filter(
+                    key.code == KeyCode::BackTab || key.modifiers.contains(KeyModifiers::SHIFT),
+                );
             } else if self.bindings_match(key, &self.keybindings.page_down) {
                 self.move_page_down();
             } else if self.bindings_match(key, &self.keybindings.page_up) {
@@ -680,6 +673,22 @@ impl App {
             .get(index.map_or(0, |index| index + 1))
             .copied()
             .unwrap_or(false)
+    }
+
+    fn cycle_filter(&mut self, reverse: bool) {
+        let count = self.filter_config.choices.len() + 1;
+        let position = self.active_filter.map_or(0, |index| index + 1);
+        for step in 1..=count {
+            let next = if reverse {
+                (position + count - step) % count
+            } else {
+                (position + step) % count
+            };
+            if !self.filter_config.cycle_nonempty || self.filter_has_items(next.checked_sub(1)) {
+                self.set_filter(next.checked_sub(1));
+                break;
+            }
+        }
     }
 
     fn set_filter(&mut self, next: Option<usize>) {
@@ -1605,6 +1614,7 @@ mod tests {
             "#,
         )
         .unwrap();
+        app.update_filter_availability();
         app.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL));
         app.handle_key(KeyEvent::from(KeyCode::Tab));
         assert_eq!(app.active_filter().unwrap().label, "working");
@@ -1619,6 +1629,118 @@ mod tests {
         assert_eq!(app.active_filter().unwrap().label, "idle");
         app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT));
         assert_eq!(app.active_filter().unwrap().label, "working");
+    }
+
+    #[test]
+    fn fil_005_cycle_skips_empty_choices_and_tracks_search_and_live_updates() {
+        let filters: FilterConfig = toml::from_str(
+            r#"
+            [[choices]]
+            key = "w"
+            label = "working"
+            source = "state"
+            value = "working"
+
+            [[choices]]
+            key = "i"
+            label = "idle"
+            source = "state"
+            value = "idle"
+
+            [[choices]]
+            key = "d"
+            label = "done"
+            source = "state"
+            value = "done"
+            "#,
+        )
+        .unwrap();
+        let mut app = app();
+        app.filter_config = filters;
+        app.replace_source(
+            vec![
+                json!({ "id": "1", "name": "Alpha", "state": "working" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+                json!({ "id": "2", "name": "Beta", "state": "idle" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ],
+            0,
+        );
+        app.set_filter_mode(true);
+        app.handle_key(KeyEvent::from(KeyCode::BackTab));
+        assert_eq!(app.active_filter, Some(1)); // skip empty done
+        app.handle_key(KeyEvent::from(KeyCode::Tab));
+        assert_eq!(app.active_filter, None);
+        app.handle_key(KeyEvent::from(KeyCode::Char('d')));
+        assert!(app.visible.is_empty()); // direct keys can still select an empty choice
+        app.handle_key(KeyEvent::from(KeyCode::Tab));
+        assert_eq!(app.active_filter, None);
+
+        app.set_filter_mode(false);
+        app.handle_key(KeyEvent::from(KeyCode::Char('A')));
+        assert_eq!(app.query, "A");
+        assert_eq!(app.active_filter, None);
+        app.set_filter_mode(true);
+        app.handle_key(KeyEvent::from(KeyCode::BackTab));
+        assert_eq!(app.active_filter, Some(0)); // idle has no matching search result
+        app.handle_key(KeyEvent::from(KeyCode::Tab));
+        assert_eq!(app.active_filter, None);
+
+        app.replace_source(
+            vec![
+                json!({ "id": "2", "name": "Alpha", "state": "idle" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ],
+            0,
+        );
+        assert_eq!(app.active_filter, None);
+        app.handle_key(KeyEvent::from(KeyCode::Tab));
+        assert_eq!(app.active_filter, Some(1));
+        app.replace_source(
+            vec![
+                json!({ "id": "2", "name": "Alpha", "state": "done" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ],
+            0,
+        );
+        assert_eq!(app.active_filter, Some(1));
+        assert!(app.visible.is_empty());
+        app.handle_key(KeyEvent::from(KeyCode::Tab));
+        assert_eq!(app.active_filter, Some(2));
+
+        app.replace_source(Vec::new(), 0);
+        app.handle_key(KeyEvent::from(KeyCode::Tab));
+        assert_eq!(app.active_filter, Some(2)); // no available destination
+    }
+
+    #[test]
+    fn fil_005_cycle_can_include_empty_choices_when_disabled() {
+        let mut app = app();
+        app.filter_config = toml::from_str(
+            r#"
+            cycle_nonempty = false
+            [[choices]]
+            key = "w"
+            label = "working"
+            source = "state"
+            value = "working"
+            "#,
+        )
+        .unwrap();
+        app.set_filter_mode(true);
+        app.handle_key(KeyEvent::from(KeyCode::Tab));
+        assert_eq!(app.active_filter, Some(0));
+        assert!(app.visible.is_empty());
+        app.handle_key(KeyEvent::from(KeyCode::Tab));
+        assert_eq!(app.active_filter, None);
     }
 
     #[test]

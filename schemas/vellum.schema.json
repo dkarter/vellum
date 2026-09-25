@@ -121,6 +121,11 @@
           "type": "string",
           "default": "|"
         },
+        "cycle_nonempty": {
+          "description": "Tab and Shift-Tab visit only choices with results for the current search, including all when it has results. Set false to include empty choices.",
+          "type": "boolean",
+          "default": true
+        },
         "mode": { "$ref": "#/$defs/bindings", "default": "ctrl-g" },
         "clear": { "$ref": "#/$defs/bindings", "default": "a" },
         "choices": {

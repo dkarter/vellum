@@ -122,6 +122,10 @@ fn sch_005_shared_schema_describes_palette_filters() {
         "|"
     );
     assert_eq!(
+        shared["properties"]["filters"]["properties"]["cycle_nonempty"]["default"],
+        true
+    );
+    assert_eq!(
         shared["properties"]["filters"]["properties"]["mode"]["default"],
         "ctrl-g"
     );

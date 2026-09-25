@@ -71,6 +71,16 @@ Vellum SHALL provide a dedicated filter mode whose configured choices narrow fuz
 - AND the configured all key or the active choice clears it while Escape exits filter mode without changing Vim mode
 - AND Tab and Shift-Tab cycle forward and backward through all and the configured choices, wrapping at either end
 
+#### Scenario: Cycling skips choices without search results {#FIL-005}
+
+- GIVEN filter choices with some empty results for the current fuzzy query
+- WHEN Tab or Shift-Tab cycles in filter mode with `filters.cycle_nonempty = true` (the default)
+- THEN only choices with matching results and the all choice when it has results are visited, wrapping in both directions
+- AND if no choice has results cycling leaves the active filter unchanged
+- AND direct choice and clear bindings still select empty choices
+- AND changes to the query or live source data affect the next cycle without automatically changing the active choice
+- AND `filters.cycle_nonempty = false` cycles through all choices regardless of results
+
 #### Scenario: Palette starts in filter mode {#FIL-004}
 
 - GIVEN a palette with `input.start_mode = "filter"` and at least one filter choice

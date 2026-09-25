@@ -146,6 +146,7 @@ pub struct FilterConfig {
     pub label: String,
     pub all_label: String,
     pub separator: String,
+    pub cycle_nonempty: bool,
     pub mode: Bindings,
     pub clear: Bindings,
     pub choices: Vec<FilterChoice>,
@@ -157,6 +158,7 @@ impl Default for FilterConfig {
             label: "filter".into(),
             all_label: "all".into(),
             separator: "|".into(),
+            cycle_nonempty: true,
             mode: Bindings::new(["ctrl-g"]),
             clear: Bindings::new(["a"]),
             choices: Vec::new(),
@@ -1347,7 +1349,7 @@ mod tests {
 
     #[test]
     fn cfg_011_filter_configuration_parses_and_layers() {
-        let global = "[filters]\nlabel = 'state'\nall_label = 'everything'\nseparator = '·'\nmode = 'ctrl-x'\nclear = 'z'";
+        let global = "[filters]\nlabel = 'state'\nall_label = 'everything'\nseparator = '·'\ncycle_nonempty = false\nmode = 'ctrl-x'\nclear = 'z'";
         let palette = format!(
             "{MINIMAL}\n{}",
             r#"
@@ -1368,6 +1370,8 @@ mod tests {
         assert_eq!(config.filters.label, "state");
         assert_eq!(config.filters.all_label, "everything");
         assert_eq!(config.filters.separator, "·");
+        assert!(!config.filters.cycle_nonempty);
+        assert!(Config::parse(MINIMAL).unwrap().filters.cycle_nonempty);
         assert_eq!(config.filters.choices[0].key.label(), "w");
         assert_eq!(config.filters.choices[0].label, "working");
         assert_eq!(config.filters.choices[0].source, "agent_status");

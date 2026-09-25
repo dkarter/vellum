@@ -41,6 +41,7 @@ Filters combine with fuzzy search and frecency ranking:
 label = "status"
 mode = "ctrl-g"
 clear = "a"
+cycle_nonempty = true
 
 [[filters.choices]]
 key = "w"
@@ -52,6 +53,8 @@ fg = "yellow"
 ```
 
 To open a palette with the choice keys immediately available, set `start_mode = "filter"` in its `[input]` section. This starts in filter mode when choices are configured, with insert mode underneath. The default `start_mode = "insert"` requires Ctrl-G before a choice key. Press the active choice again or the clear key to show all items. Another choice replaces the active filter. Escape closes filter mode and returns to insert editing without cancelling; search then combines with the active filter. With no filter choices, `start_mode = "filter"` falls back to insert editing. Filter sources support dot paths such as `metadata.state`.
+
+Tab and Shift-Tab cycle through choices with results for the current search, including all when it has results. This updates as live source values change; if no choice has results, cycling leaves the selection alone. Direct choice keys still work for empty choices. Set `cycle_nonempty = false` under `[filters]` to cycle through every choice instead.
 
 ```toml
 [input]
