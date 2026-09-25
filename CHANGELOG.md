@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.5.0](https://github.com/dkarter/vellum/compare/v1.4.0...v1.5.0) (2026-09-25)
+
+
+### Features
+
+* **filters:** skip empty choices when cycling ([792aba0](https://github.com/dkarter/vellum/commit/792aba066ecc5d367ddf9857b55c5512f9cf99aa))
+
+
+### Bug Fixes
+
+* **tooling:** align OpenSpec dependency lock ([aa72620](https://github.com/dkarter/vellum/commit/aa72620223af29e6b6c99059c8f034ff22146770))
+
 ## [1.4.0](https://github.com/dkarter/vellum/compare/v1.3.0...v1.4.0) (2026-09-24)
 
 
