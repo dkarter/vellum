@@ -6,7 +6,7 @@ vlm = "cargo run --release --bin vlm --"
 "npm:@fission-ai/openspec" = { version = "latest", aube_args = "--deny-build=@fission-ai/openspec" }
 aube = "latest"
 gitleaks = "latest"
-hk = "2.0.1"
+hk = "2.2.0"
 node = "26"
 ripgrep = "latest"
 rust = { version = "1.98.1", mr_boxington = true }
