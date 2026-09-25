@@ -49,6 +49,8 @@ mise run website-build
 
 Start the documentation site locally with `mise run website-dev`.
 
+`mise install` also installs the repository's hk Git hooks. Pre-commit checks staged Rust formatting, validates `hk.pkl` when it changes, and scans staged files for secrets; commit messages follow Conventional Commits. Pre-push runs Rust tests, OpenSpec checks, palette/schema metadata tests, or the website build only when relevant files changed. Run `hk check` to check modified files or `hk check --all` to check the whole project.
+
 ## License
 
 MIT
