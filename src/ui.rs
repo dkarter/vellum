@@ -15,7 +15,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     app::App,
-    config::{Alignment, Config, PreviewBorder, PreviewPosition, Theme},
+    config::{Alignment, Config, PreviewPosition, Theme},
     item::{RenderedRow, RenderedSegment},
 };
 
@@ -505,16 +505,7 @@ fn push_title_cells(
 
 fn render_preview(frame: &mut Frame, app: &mut App, config: &Config, area: Rect) {
     let theme = &config.theme;
-    let borders = match config.preview.border {
-        PreviewBorder::None => Borders::NONE,
-        PreviewBorder::Full => Borders::ALL,
-        PreviewBorder::Separator => match config.preview.position {
-            PreviewPosition::Left => Borders::RIGHT,
-            PreviewPosition::Right => Borders::LEFT,
-            PreviewPosition::Top => Borders::BOTTOM,
-            PreviewPosition::Bottom => Borders::TOP,
-        },
-    };
+    let borders = crate::preview::borders(&config.preview);
     let block = Block::new()
         .borders(borders)
         .border_style(Style::new().fg(color(&theme.border)));
@@ -949,6 +940,7 @@ fn themed_color(value: &str, theme: &Theme) -> Color {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::PreviewBorder;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use ratatui::{Terminal, backend::TestBackend};
     use serde_json::json;

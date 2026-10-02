@@ -33,6 +33,13 @@ value = "mine-open"
 fg = "theme.colors.green"
 
 [[filters.choices]]
+key = "o"
+label = "all open"
+source = "category"
+value = "all-open"
+fg = "theme.colors.green"
+
+[[filters.choices]]
 key = "r"
 label = "needs my review"
 source = "category"
@@ -56,7 +63,7 @@ fg = "theme.colors.cyan"
 [preview]
 enabled = true
 title = "Reviews and checks"
-command = ["printf", "%s", "$details"]
+command = ["sh", "-c", 'if command -v glow >/dev/null 2>&1; then printf "%s" "$1" | glow --style "$VELLUM_PREVIEW_STYLE" --width "$VELLUM_PREVIEW_WIDTH" - || printf "%s" "$1"; else printf "%s" "$1"; fi', "sh", "$details"]
 
 [actions]
 default = "open"
@@ -64,16 +71,19 @@ default = "open"
 [[actions.items]]
 name = "open"
 label = "Open pull request"
+icon = ""
 command = ["gh", "pr", "view", "$number", "--web"]
 
 [[actions.items]]
 name = "checkout"
 label = "Check out branch"
+icon = ""
 command = ["gh", "pr", "checkout", "$number"]
 
 [[actions.items]]
 name = "checks"
 label = "Open status checks"
+icon = "󰙨"
 command = ["gh", "pr", "checks", "$number", "--web"]
 
 [item]

@@ -2,6 +2,7 @@ use std::{
     collections::VecDeque,
     io::Read,
     process::{Command, Stdio},
+    str::FromStr,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -19,9 +20,83 @@ use serde_json::{Map, Value};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
-use crate::{action, app::App, config::PreviewConfig};
+use crate::{
+    action,
+    app::App,
+    config::{Config, PreviewBorder, PreviewConfig, PreviewPosition},
+};
 
 const MAX_OUTPUT: u64 = 128 * 1024;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct RenderContext {
+    width: u16,
+    style: &'static str,
+}
+
+impl Default for RenderContext {
+    fn default() -> Self {
+        Self {
+            width: 80,
+            style: "dark",
+        }
+    }
+}
+
+impl RenderContext {
+    fn new(app: &App, config: &Config) -> Self {
+        let width = app.preview_area.map_or(80, |area| {
+            ratatui::widgets::Block::new()
+                .borders(borders(&config.preview))
+                .inner(area)
+                .width
+                .saturating_sub(u16::from(config.preview.scrollbar))
+                .max(1)
+        });
+        let light = light_background(&config.theme.background);
+        Self {
+            width,
+            style: if light { "light" } else { "dark" },
+        }
+    }
+}
+
+pub(crate) fn borders(config: &PreviewConfig) -> ratatui::widgets::Borders {
+    use ratatui::widgets::Borders;
+    match config.border {
+        PreviewBorder::None => Borders::NONE,
+        PreviewBorder::Full => Borders::ALL,
+        PreviewBorder::Separator => match config.position {
+            PreviewPosition::Left => Borders::RIGHT,
+            PreviewPosition::Right => Borders::LEFT,
+            PreviewPosition::Top => Borders::BOTTOM,
+            PreviewPosition::Bottom => Borders::TOP,
+        },
+    }
+}
+
+fn light_background(background: &str) -> bool {
+    match Color::from_str(background).unwrap_or(Color::Reset) {
+        Color::Rgb(red, green, blue) => {
+            u32::from(red) * 299 + u32::from(green) * 587 + u32::from(blue) * 114 >= 128000
+        }
+        Color::White
+        | Color::Gray
+        | Color::Yellow
+        | Color::LightYellow
+        | Color::Green
+        | Color::LightGreen
+        | Color::Cyan
+        | Color::LightCyan => true,
+        _ => false,
+    }
+}
+
+#[derive(Clone, PartialEq)]
+struct CacheKey {
+    item: Map<String, Value>,
+    context: RenderContext,
+}
 
 pub struct Worker {
     receiver: Receiver<Arc<Text<'static>>>,
@@ -29,12 +104,12 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn start(config: PreviewConfig, item: Map<String, Value>) -> Self {
+    fn start(config: PreviewConfig, item: Map<String, Value>, context: RenderContext) -> Self {
         let (sender, receiver) = mpsc::channel();
         let cancelled = Arc::new(AtomicBool::new(false));
         let flag = cancelled.clone();
         thread::spawn(move || {
-            let output = run(&config, &item, &flag);
+            let output = run(&config, &item, context, &flag);
             let _ = sender.send(Arc::new(parse_ansi(&output)));
         });
         Self {
@@ -51,23 +126,29 @@ impl Worker {
 /// Most recent 50 previews, capped at 128 KiB per command by the worker.
 #[derive(Default)]
 pub struct Cache {
-    entries: VecDeque<(Map<String, Value>, Arc<Text<'static>>)>,
+    entries: VecDeque<(CacheKey, Arc<Text<'static>>)>,
 }
 
 #[derive(Default)]
 pub struct Controller {
-    selected: Option<Map<String, Value>>,
+    selected: Option<CacheKey>,
     worker: Option<Worker>,
     cache: Cache,
 }
 
 impl Controller {
     /// Keep the last frame intact until the next result arrives, like Television.
-    pub fn update(&mut self, app: &mut App, config: &PreviewConfig) -> bool {
-        if !config.enabled {
+    pub fn update(&mut self, app: &mut App, config: &Config) -> bool {
+        if !config.preview.enabled || app.preview_area.is_none() {
+            self.worker = None;
+            self.selected = None;
             return false;
         }
-        let selected = app.selected_source_item().cloned();
+        let context = RenderContext::new(app, config);
+        let selected = app
+            .selected_source_item()
+            .cloned()
+            .map(|item| CacheKey { item, context });
         if selected != self.selected {
             self.worker = None;
             self.selected = selected;
@@ -76,7 +157,11 @@ impl Controller {
                     app.set_preview_content(content);
                     return true;
                 }
-                self.worker = Some(Worker::start(config.clone(), item.clone()));
+                self.worker = Some(Worker::start(
+                    config.preview.clone(),
+                    item.item.clone(),
+                    context,
+                ));
             } else {
                 app.set_preview_text(String::new());
                 return true;
@@ -99,7 +184,7 @@ impl Controller {
 }
 
 impl Cache {
-    pub fn get(&mut self, item: &Map<String, Value>) -> Option<Arc<Text<'static>>> {
+    fn get(&mut self, item: &CacheKey) -> Option<Arc<Text<'static>>> {
         let index = self.entries.iter().position(|(key, _)| key == item)?;
         let entry = self.entries.remove(index)?;
         let content = Arc::clone(&entry.1);
@@ -107,7 +192,7 @@ impl Cache {
         Some(content)
     }
 
-    pub fn insert(&mut self, item: Map<String, Value>, content: Arc<Text<'static>>) {
+    fn insert(&mut self, item: CacheKey, content: Arc<Text<'static>>) {
         if let Some(index) = self.entries.iter().position(|(key, _)| key == &item) {
             self.entries.remove(index);
         }
@@ -124,12 +209,19 @@ impl Drop for Worker {
     }
 }
 
-fn run(config: &PreviewConfig, item: &Map<String, Value>, cancelled: &AtomicBool) -> String {
+fn run(
+    config: &PreviewConfig,
+    item: &Map<String, Value>,
+    context: RenderContext,
+    cancelled: &AtomicBool,
+) -> String {
     let result = (|| -> anyhow::Result<String> {
         let argv = action::interpolate(config.command.as_deref().unwrap_or_default(), item)?;
         let mut command = Command::new(&argv[0]);
         command
             .args(&argv[1..])
+            .env("VELLUM_PREVIEW_WIDTH", context.width.to_string())
+            .env("VELLUM_PREVIEW_STYLE", context.style)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
@@ -324,36 +416,84 @@ mod tests {
             .collect();
         let mut app = App::new(
             items,
-            config.item,
-            config.keybindings,
-            config.filters,
-            config.input,
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
             true,
         );
         let mut controller = Controller::default();
-        assert!(!controller.update(&mut app, &config.preview));
+        app.preview_area = Some(ratatui::layout::Rect::new(0, 0, 42, 20));
+        assert!(!controller.update(&mut app, &config));
         assert!(controller.pending());
         for _ in 0..100 {
-            if controller.update(&mut app, &config.preview) {
+            if controller.update(&mut app, &config) {
                 break;
             }
             thread::sleep(Duration::from_millis(5));
         }
         assert_eq!(app.preview_lines.lines[0].spans[0].content, "one");
         app.selected = 1;
-        assert!(!controller.update(&mut app, &config.preview));
+        assert!(!controller.update(&mut app, &config));
         assert_eq!(app.preview_lines.lines[0].spans[0].content, "one");
         app.selected = 0;
-        assert!(controller.update(&mut app, &config.preview));
+        assert!(controller.update(&mut app, &config));
         assert!(!controller.pending());
         assert_eq!(app.preview_lines.lines[0].spans[0].content, "one");
         for id in 0..52 {
             let item = serde_json::json!({"id":id}).as_object().unwrap().clone();
-            controller
-                .cache
-                .insert(item, Arc::new(Text::raw(format!("{id}"))));
+            controller.cache.insert(
+                CacheKey {
+                    item,
+                    context: RenderContext::default(),
+                },
+                Arc::new(Text::raw(format!("{id}"))),
+            );
         }
         assert_eq!(controller.cache.entries.len(), 50);
+    }
+
+    #[test]
+    fn ui_022_preview_environment_and_cache_follow_width_and_style() {
+        let mut config = Config::parse("[source]\ncmd='unused'\n[item]\ntemplate=[['$id']]\nvalue='$id'\n[preview]\nenabled=true\ncommand=['sh','-c','printf \"%s %s\" \"$VELLUM_PREVIEW_WIDTH\" \"$VELLUM_PREVIEW_STYLE\"']").unwrap();
+        let item = serde_json::json!({"id":"one"}).as_object().unwrap().clone();
+        let mut app = App::new(
+            vec![item],
+            config.item.clone(),
+            config.keybindings.clone(),
+            config.filters.clone(),
+            config.input.clone(),
+            true,
+        );
+        app.preview_area = Some(ratatui::layout::Rect::new(0, 0, 42, 20));
+        let mut controller = Controller::default();
+        let settle = |controller: &mut Controller, app: &mut App, config: &Config| {
+            for _ in 0..100 {
+                controller.update(app, config);
+                if !controller.pending() {
+                    return;
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            panic!("preview did not settle");
+        };
+        settle(&mut controller, &mut app, &config);
+        assert_eq!(app.preview_lines.lines[0].spans[0].content, "40 dark");
+        app.preview_area.as_mut().unwrap().width = 62;
+        settle(&mut controller, &mut app, &config);
+        assert_eq!(app.preview_lines.lines[0].spans[0].content, "60 dark");
+        config.theme.background = "white".into();
+        settle(&mut controller, &mut app, &config);
+        assert_eq!(app.preview_lines.lines[0].spans[0].content, "60 light");
+        app.preview_area.as_mut().unwrap().width = 42;
+        config.theme.background = "black".into();
+        assert!(controller.update(&mut app, &config));
+        assert!(!controller.pending());
+        assert_eq!(app.preview_lines.lines[0].spans[0].content, "40 dark");
+        app.preview_area = None;
+        assert!(!controller.update(&mut app, &config));
+        assert!(!controller.pending());
+        assert!(controller.selected.is_none());
     }
 
     #[test]
@@ -363,7 +503,11 @@ mod tests {
             ..PreviewConfig::default()
         };
         let item = serde_json::json!({"path": "a path; $(echo unsafe)"});
-        let worker = Worker::start(config, item.as_object().unwrap().clone());
+        let worker = Worker::start(
+            config,
+            item.as_object().unwrap().clone(),
+            RenderContext::default(),
+        );
         let mut result = None;
         for _ in 0..100 {
             result = worker.try_recv();
@@ -393,7 +537,7 @@ mod tests {
             ..PreviewConfig::default()
         };
         let started = Instant::now();
-        let worker = Worker::start(config, Map::new());
+        let worker = Worker::start(config, Map::new(), RenderContext::default());
         assert!(started.elapsed() < Duration::from_millis(30));
         let mut output = None;
         for _ in 0..100 {

@@ -13,11 +13,14 @@ Vellum SHALL provide an official gh-backed repository PR palette with review-che
 - GIVEN the official github-prs palette and an authenticated gh CLI in a repository
 - WHEN it starts
 - THEN it opens filter mode with mine open selected and a five-minute cache TTL
-- AND choices include mine open, needs my review, mine closed, and reviewed closed
+- AND choices include mine open, all open, needs my review, mine closed, and reviewed closed
+- AND all open includes every open PR in the repository regardless of author or review involvement, including drafts, with shortcut `o`
 - AND mine filters use the current user's authorship, with closed including merged PRs
 - AND needs my review excludes authored PRs and includes direct review requests, the user's latest substantive review being dismissed, or unresolved review threads the user commented on
 - AND reviewed closed includes merged or closed PRs the user reviewed or left review comments on
 - AND items show approval and latest-commit status-check summaries with detailed previews
+- AND previews render Markdown with Glow when available, wrapping to the pane width, and fall back to plain text otherwise
+- AND the open, checkout, and checks actions display pull-request, branch, and check icons
 - AND the author is left-aligned on the second row with a distinct theme accent
 - AND PR state is right-aligned on the first row, using theme green for open, purple for merged, red for closed, and muted styling for drafts
 - AND empty default categories are dimmed and skipped by Tab, while their shortcuts still work

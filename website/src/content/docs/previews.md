@@ -26,6 +26,14 @@ Ctrl-U and Ctrl-D scroll the preview by half a viewport when previews are active
 
 `initial_scroll = "bottom"` starts each new preview at the latest lines, including cached results; omit it to start at the top. This is useful for live pane output. After the preview appears, the usual keys and mouse wheel scroll freely in either direction.
 
+Preview commands receive `VELLUM_PREVIEW_WIDTH` (available text columns, reserving a column when scrollbars are enabled) and `VELLUM_PREVIEW_STYLE` (`light` or `dark`, based on the active theme background). Previews rerun when width or style changes, and their cache includes both values. For Markdown in a `$body` field:
+
+```toml
+[preview]
+enabled = true
+command = ["sh", "-c", 'printf "%s" "$1" | glow --style "$VELLUM_PREVIEW_STYLE" --width "$VELLUM_PREVIEW_WIDTH" -', "sh", "$body"]
+```
+
 Use `--preview` to enable a configured preview, `--no-preview` to hide it, or `--preview-position left|right|top|bottom` to enable it at that location for one invocation. A preview command must be configured to enable previews. On small terminals the pane disappears automatically so results remain usable. The preview uses your existing theme's foreground, background, border, and selection colors.
 
 See the [files-with-preview example](https://github.com/dkarter/vellum/blob/main/examples/files-preview.toml) for a complete palette.

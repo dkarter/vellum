@@ -254,6 +254,7 @@ pub fn has_items(filter: &str, size: usize, cancellation: Option<&Cancellation>)
 
 fn search_query(repo: &str, user: &str, filter: &str, query: &str) -> Result<String> {
     let qualifier = match filter {
+        "all-open" => String::from("is:open"),
         "mine-open" => format!("is:open author:{user}"),
         "needs-review" => format!(
             "is:open -author:{user} (review-involves:{user} OR reviewed-by:{user} OR commenter:{user})"
@@ -455,6 +456,7 @@ fn requested_from(pr: &Value, user: &str) -> bool {
 fn matches_filter(pr: &Value, user: &str, filter: &str) -> bool {
     let open = pr["state"] == "OPEN";
     match filter {
+        "all-open" => open,
         "mine-open" => open && authored_by(pr, user),
         "mine-closed" => !open && authored_by(pr, user),
         "needs-review" => {
@@ -514,7 +516,7 @@ fn item(pr: &Value, filter: &str) -> SourceItem {
             .as_str()
             .or_else(|| check["targetUrl"].as_str())
             .unwrap_or_default();
-        check_details.push(format!("  {name}: {state}\n    {url}"));
+        check_details.push(format!("- **{name}: {state}**\n\n  {url}"));
     }
     let checks_summary = if checks.is_empty() {
         "no checks".into()
@@ -524,11 +526,11 @@ fn item(pr: &Value, filter: &str) -> SourceItem {
     let approvals_summary = format!("✓ {approvals} approvals");
     let mut review_details: Vec<_> = reviews
         .iter()
-        .map(|(login, review)| format!("  @{login}: {}", text(review, "state")))
+        .map(|(login, review)| format!("- @{login}: {}", text(review, "state")))
         .collect();
     review_details.sort();
     let details = format!(
-        "#{} {}\n{}{} · @{}\n{} → {}\n{}\n\nReviews: {}\n{}\nUnresolved review threads: {}\n\nChecks: {}\n{}\n\n{}",
+        "# PR #{} {}\n\n**{}{} · @{}**\n\n{} → {}\n\n{}\n\n## Reviews\n\n{}\n\n{}\n\nUnresolved review threads: {}\n\n## Checks\n\n{}\n\n{}\n\n---\n\n## Description\n\n{}",
         pr["number"],
         text(pr, "title"),
         text(pr, "state"),
@@ -565,6 +567,36 @@ mod tests {
         json!({"number": 42, "title":"Improve loading", "author":{"login":"someone"}, "state":"OPEN",
             "reviews":{"nodes":[]}, "reviewRequests":{"nodes":[]}, "reviewThreads":{"nodes":[]},
             "commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"nodes":[]}}}}]}})
+    }
+
+    #[test]
+    fn pal_020_all_open_includes_all_authors_and_drafts_but_excludes_closed() {
+        let mut value = pr();
+        for author in ["me", "someone"] {
+            value["author"]["login"] = json!(author);
+            for draft in [false, true] {
+                value["isDraft"] = json!(draft);
+                assert!(matches_filter(&value, "me", "all-open"));
+            }
+        }
+        for state in ["CLOSED", "MERGED"] {
+            value["state"] = json!(state);
+            assert!(!matches_filter(&value, "me", "all-open"));
+        }
+        assert_eq!(
+            search_query("owner/repo", "me", "all-open", "cache").unwrap(),
+            "repo:owner/repo is:pr is:open in:title \"cache\" sort:updated-desc"
+        );
+        let config =
+            crate::config::Config::parse(include_str!("../palettes/github-prs.toml")).unwrap();
+        assert!(
+            config
+                .filters
+                .choices
+                .iter()
+                .any(|choice| choice.value == "all-open" && choice.key.label() == "o")
+        );
+        assert_eq!(config.filters.initial.as_deref(), Some("mine-open"));
     }
 
     #[test]

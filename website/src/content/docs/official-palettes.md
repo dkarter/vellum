@@ -11,13 +11,16 @@ Install the bundled palettes with `vlm palettes sync`. Existing files remain unt
 | `herdr-agents` | `herdr` | Output agent pane ID |
 | `files` | `fd` and a Nerd Font | Output file path |
 | `themes` | None | Save selected theme to global config |
-| `github-prs` | Authenticated `gh`, a repository checkout | Open PR in browser |
+| `github-prs` | Authenticated `gh`, a repository checkout; optional `glow` for Markdown previews | Open PR in browser |
 
 ## GitHub pull requests
+
+With `glow` installed, the preview renders Markdown headings, emphasis, lists, tables, and code blocks instead of raw markup. It wraps to the pane width and selects Glow's light or dark style based on the active theme's background. Resizing rerenders the preview; without Glow, the text remains available unformatted.
 
 Run `vlm github-prs` in a repository checkout. It starts with **mine open** selected and the filter controls open:
 
 - **m — mine open:** your open PRs.
+- **o — all open:** every open PR in the repository, including drafts, regardless of author or review involvement.
 - **r — needs my review:** other authors' open PRs with a direct review request for you, your latest substantive review dismissed, or unresolved review threads you commented on. An approval alone does not include a PR.
 - **c — mine closed:** your merged or closed PRs.
 - **v — reviewed closed:** merged or closed PRs you reviewed or left review comments on.

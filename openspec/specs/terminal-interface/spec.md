@@ -21,6 +21,13 @@ Vellum SHALL resolve explicit `theme.colors.<name>` segment color references fro
 
 Vellum SHALL render ANSI-colored preview output, scroll it with configurable bindings, optionally show a scrollbar, and allow full, separator, or borderless preview chrome. Results MAY have a titled surrounding box.
 
+#### Scenario: Preview commands adapt Markdown to the pane {#UI-022}
+
+- GIVEN a command preview using the pane width and active background style
+- WHEN selection, pane width, or light/dark theme changes
+- THEN the command receives `VELLUM_PREVIEW_WIDTH` and `VELLUM_PREVIEW_STYLE` environment values
+- AND cached results are reused only for the same item, width, and style
+
 #### Scenario: New previews start at the configured edge {#UI-020}
 
 - GIVEN a preview configured with `initial_scroll = "bottom"` and ANSI output longer than the viewport

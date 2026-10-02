@@ -408,7 +408,7 @@ fn run(
             dirty |= apply_selected_theme(app, config);
         }
         if !theme_browser {
-            dirty |= previews.update(app, &config.preview);
+            dirty |= previews.update(app, config);
         }
         if dirty {
             ui::redraw(terminal, app, config)?;
@@ -422,6 +422,11 @@ fn run(
                 cursor_mode = Some(desired_cursor);
             }
             dirty = false;
+            // Drawing resolves the preview geometry, including after a resize.
+            if !theme_browser && previews.update(app, config) {
+                dirty = true;
+                continue;
+            }
         }
 
         let timeout = if app.outcome == Outcome::Running {

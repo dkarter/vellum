@@ -126,7 +126,7 @@ pub struct Controller {
 impl Controller {
     pub fn new(config: SourceConfig, value_field: String) -> Self {
         let cwd = std::env::current_dir().unwrap_or_default();
-        let mut scope = format!("v3:{cwd:?}:{config:?}");
+        let mut scope = format!("v4:{cwd:?}:{config:?}");
         let mut cache_allowed = true;
         if config.builtin == Some(BuiltinSource::GithubPrs)
             && config
