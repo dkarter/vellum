@@ -8,6 +8,33 @@ fn read_json(path: &str) -> Value {
 }
 
 #[test]
+fn sch_011_shared_schema_describes_remote_sources() {
+    let schema = read_json("schemas/vellum.schema.json");
+    assert!(
+        schema["properties"]["source"]["properties"]["builtin"]["enum"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("github-prs"))
+    );
+    let remote = &schema["properties"]["source"]["properties"]["remote"]["properties"];
+    assert_eq!(remote["page_size"]["maximum"], 100);
+    assert_eq!(remote["cache_ttl_ms"]["default"], 0);
+    assert_eq!(remote["probe_filters"]["default"], false);
+    assert_eq!(remote["search_debounce_ms"]["minimum"], 0);
+    assert_eq!(
+        schema["properties"]["theme"]["properties"]["colors"]["properties"]
+            .as_object()
+            .unwrap()
+            .len(),
+        16
+    );
+    assert_eq!(
+        schema["properties"]["filters"]["properties"]["initial"]["type"],
+        "string"
+    );
+}
+
+#[test]
 fn sch_001_bundled_schema_is_valid_json() {
     let schema: Value = serde_json::from_str(
         &fs::read_to_string("schemas/vellum.schema.json").expect("schema should be readable"),

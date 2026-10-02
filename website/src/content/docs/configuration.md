@@ -64,6 +64,22 @@ normal_mode_background = "#e0af68"
 
 Colors accept Ratatui names such as `cyan`, `dark_gray`, and `reset`, or RGB hex values. Some presentation colors can read a source field by using a value such as `$status_color`.
 
+### Standard palette colors
+
+UI roles such as `foreground`, `border`, and `selection_background` are separate from the standard **16-color ANSI palette** under `[theme.colors]`: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, and the corresponding `bright_` names.
+
+```toml
+[theme.colors]
+green = "#9ece6a"
+magenta = "#bb9af7"
+cyan = "#7dcfff"
+bright_white = "#c0caf5"
+```
+
+Item segment and token colors can reference these using `fg = "theme.colors.green"` or `bg = "theme.colors.bright_black"`. UI-role references such as `theme.foreground`, `theme.background`, and `theme.muted` (the border color) also work. Literal names and source-field colors keep their existing behavior; theme references are explicit and opt-in.
+
+Built-in themes provide all 16 colors and the theme browser saves them. Previously saved built-in themes infer missing palette colors from their foreground/background pair, so selecting the theme again is not required. Custom themes can override individual colors; otherwise Vellum uses the terminal's ANSI colors.
+
 Copy-ready [Tokyo Night, Catppuccin Mocha, Dracula, Gruvbox Dark, and Nord themes](https://github.com/dkarter/vellum/tree/main/examples/themes) are available in `examples/themes/`. Use one as your global `config.toml`, or copy its `[theme]` section into an existing global or palette configuration.
 
 For a live theme browser, run `vlm palettes sync` then `vlm themes`. Enter saves the highlighted theme to your global config. Add `item.box_title = "Results"` to a palette to surround its list with a named border.

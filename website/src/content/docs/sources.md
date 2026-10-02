@@ -32,6 +32,41 @@ refresh_ms = 1000
 
 `herdr-workspaces` and `herdr-agents` consume `herdr api snapshot`. `files` invokes `fd --type f --color never --print0`. `themes` provides Vellum's built-in theme variants for the theme browser. Built-ins normalize records in process, avoiding fragile shell transformation pipelines.
 
+## Opt-in remote pages
+
+Command sources and the `github-prs` built-in can enable cursor pagination and optional disk caching:
+
+```toml
+[source]
+cmd = "my-remote-source"
+
+[source.remote]
+page_size = 30       # 1–100
+cache_ttl_ms = 300000 # five minutes; 0 disables disk caching
+# probe_filters = true  # optional background default-category availability
+# search_debounce_ms = 300 # optional server search after a typing pause
+```
+
+A remote command receives `VELLUM_FILTER` (active choice value, or empty for all), `VELLUM_QUERY` (committed server query, or empty), `VELLUM_CURSOR` (empty on the first page), and `VELLUM_PAGE_SIZE`. These are environment values, not shell substitutions into the command. It must return one JSON object:
+
+```json
+{"items": [{"id": "one", "category": "open"}], "next_cursor": "opaque-cursor"}
+```
+
+Omit `next_cursor` or return `null` when exhausted. Empty or unchanged cursors are rejected. Items must still contain the fields used by the active exact-match filter. Changing a filter cancels its old request, loads that filter's cache or first page, and ignores obsolete results.
+
+Fuzzy matching is always immediate over loaded items. Opt in to server search with `search_debounce_ms`: after the typing pause, the command receives the latest `VELLUM_QUERY`. Its matches augment loaded items while keeping the fuzzy query and selected identity. New edits cancel obsolete requests, and caches/cursors belong to both the filter and committed server query. Clearing the query restores default pagination immediately. Without this option, query edits never fetch from the source.
+
+With `probe_filters = true`, Vellum checks unsearched categories in the background, paging until it finds an item or reaches exhaustion. It caches availability for `cache_ttl_ms`. Empty or unknown choices are dimmed and skipped by nonempty cycling, but direct shortcuts still select them. Producers may instead include `filter_availability` in their page response: an object mapping filter choice values (and `""` for all) to booleans. Availability describes default categories, not matches for the current search.
+
+Downward navigation at the end loads another page asynchronously. Pages append unique `item.value` identities while preserving selection. Requests show footer loading text; errors retain existing items and leave the interface usable. Downward navigation retries a failed first or next page.
+
+Fresh cache entries skip the initial fetch. Expired entries render immediately and refresh in the background. The freshness timestamp belongs to the first page, so fetching more pages does not extend the TTL. Cache I/O failures are nonfatal. `source.refresh_ms` remains optional and refreshes the active filter from its first page.
+
+Cache writes and eviction run in the background. Snapshots are capped at eight MiB, with at most 100 files retained after pruning. On Unix, cache files use owner-only read/write permissions. Oversized or unreadable snapshots are treated as cache misses.
+
+Palettes without `source.remote` keep their existing source behavior. File and stdin sources cannot enable remote pages.
+
 ## File sources
 
 ```toml

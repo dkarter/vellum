@@ -6,6 +6,17 @@ Provide editor validation and completion metadata for Vellum TOML configuration.
 
 ## Requirements
 
+### Requirement: Describe remote source options
+
+Vellum SHALL publish remote source and initial-filter options in the shared global and palette schema.
+
+#### Scenario: Shared schema describes remote sources {#SCH-011}
+
+- GIVEN the schema shared by global and palette configuration
+- WHEN its source and filter fields are inspected
+- THEN it documents github-prs, opt-in remote page sizes and cache TTL, and initial filter values
+- AND it documents default-filter probes, server search debounce, and all 16 ANSI colors under `theme.colors`
+
 ### Requirement: Publish valid JSON Schema
 
 Vellum SHALL include a machine-readable JSON Schema covering global and palette configuration fields.

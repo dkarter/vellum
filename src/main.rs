@@ -28,7 +28,7 @@ use vellum::{
     builtins::BuiltinSource,
     config::{Config, OnSuccess},
     frecency::Frecency,
-    official, preview, source, themes, ui,
+    official, preview, remote, source, themes, ui,
 };
 
 mod completions;
@@ -51,35 +51,7 @@ struct TerminalSession {
     active: bool,
 }
 
-struct SourceWorker {
-    receiver: Receiver<Result<Vec<source::SourceItem>>>,
-    cancellation: source::Cancellation,
-    handle: Option<thread::JoinHandle<()>>,
-}
-
-impl SourceWorker {
-    fn try_recv(&self) -> std::result::Result<Result<Vec<source::SourceItem>>, TryRecvError> {
-        self.receiver.try_recv()
-    }
-
-    #[cfg(test)]
-    fn recv_timeout(
-        &self,
-        timeout: Duration,
-    ) -> std::result::Result<Result<Vec<source::SourceItem>>, std::sync::mpsc::RecvTimeoutError>
-    {
-        self.receiver.recv_timeout(timeout)
-    }
-}
-
-impl Drop for SourceWorker {
-    fn drop(&mut self) {
-        self.cancellation.cancel();
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
-        }
-    }
-}
+type SourceWorker = vellum::worker::Worker<Vec<source::SourceItem>>;
 
 fn main() -> Result<()> {
     // Completion requests do not load configuration or initialize the terminal.
@@ -214,16 +186,23 @@ fn main() -> Result<()> {
     } else {
         None
     };
+    let mut source_exhausted = true;
     let (source_items, initial_source) = if let Some(items) = stdin_items {
+        config.source.remote = None;
         (items, None)
     } else if let Some(cache) = &run_request.source_cache {
         if config.actions.has_refresh_action() {
             bail!("stdin CLI sources cannot be used with action on_success = 'refresh'");
         }
         config.source.refresh_ms = 0;
+        config.source.remote = None;
         (source::load_json(cache)?, None)
     } else if run_request.select_1 {
-        (source::run(&config.source)?, None)
+        let (items, exhausted) = load_select_one_source(&config)?;
+        source_exhausted = exhausted;
+        (items, None)
+    } else if config.source.remote.is_some() {
+        (Vec::new(), None)
     } else {
         (Vec::new(), Some(spawn_refresh(config.source.clone())))
     };
@@ -267,7 +246,7 @@ fn main() -> Result<()> {
     if initial_source.is_some() {
         app.start_loading();
     }
-    if run_request.select_1 {
+    if run_request.select_1 && source_exhausted {
         app.accept_if_only();
     }
 
@@ -313,6 +292,22 @@ fn record_selection(frecency: Option<&mut Frecency>, palette: &str, value: &str)
         frecency.record(palette, value)?;
     }
     Ok(())
+}
+
+fn load_select_one_source(config: &Config) -> Result<(Vec<source::SourceItem>, bool)> {
+    if let Some(remote_config) = &config.source.remote {
+        let page = remote::fetch(
+            &config.source,
+            config.filters.initial.as_deref().unwrap_or_default(),
+            "",
+            None,
+            remote_config.page_size,
+            None,
+        )?;
+        Ok((page.items, page.next_cursor.is_none()))
+    } else {
+        Ok((source::run(&config.source)?, true))
+    }
 }
 
 impl TerminalSession {
@@ -394,6 +389,11 @@ fn run(
     let mut dirty = true;
     let mut cursor_mode = None;
     let mut previews = preview::Controller::default();
+    let mut remote_source = config
+        .source
+        .remote
+        .as_ref()
+        .map(|_| remote::Controller::new(config.source.clone(), config.item.value.clone()));
     if let Some(result) = receive_refresh(&refresh_result)? {
         dirty |= apply_source_result(app, result, 0, initial_source_pending)?;
         refresh_result = None;
@@ -401,6 +401,9 @@ fn run(
         initial_source_pending = false;
     }
     loop {
+        if let Some(controller) = &mut remote_source {
+            dirty |= controller.update(app, started.elapsed().as_millis() as u64);
+        }
         if theme_browser {
             dirty |= apply_selected_theme(app, config);
         }
@@ -432,6 +435,9 @@ fn run(
                 } else if refresh_result.is_some()
                     || !availability_results.is_empty()
                     || previews.pending()
+                    || remote_source
+                        .as_ref()
+                        .is_some_and(|controller| controller.pending())
                 {
                     Some(if previews.pending() {
                         Duration::from_millis(10)
@@ -441,7 +447,14 @@ fn run(
                 } else {
                     None
                 },
-                app.availability_refresh_in(),
+                app.availability_refresh_in()
+                    .into_iter()
+                    .chain(
+                        remote_source
+                            .as_ref()
+                            .and_then(|controller| controller.wake_in()),
+                    )
+                    .min(),
             )
         } else {
             Duration::ZERO
@@ -461,7 +474,12 @@ fn run(
             availability_results.clear();
             match execute_requested_action(app, config, started.elapsed().as_millis() as u64)? {
                 ActionExecution::Exit => return Ok(Outcome::ActionCompleted),
-                ActionExecution::Refreshed => last_refresh = Instant::now(),
+                ActionExecution::Refreshed => {
+                    last_refresh = Instant::now();
+                    if let Some(controller) = &mut remote_source {
+                        controller.refresh(app);
+                    }
+                }
                 ActionExecution::Failed => {}
             }
         }
@@ -510,7 +528,14 @@ fn run(
             && refresh_result.is_none()
             && last_refresh.elapsed() >= refresh_interval
         {
-            refresh_result = Some(spawn_refresh(config.source.clone()));
+            if let Some(controller) = &mut remote_source {
+                if !controller.pending() {
+                    controller.refresh(app);
+                    dirty = true;
+                }
+            } else {
+                refresh_result = Some(spawn_refresh(config.source.clone()));
+            }
             last_refresh = Instant::now();
         }
     }
@@ -564,6 +589,10 @@ fn execute_requested_action(
         .context("selected action has no source item")?;
     match action::run(action, item) {
         Ok(()) if action.on_success == OnSuccess::Exit => Ok(ActionExecution::Exit),
+        Ok(()) if config.source.remote.is_some() => {
+            app.finish_action(None);
+            Ok(ActionExecution::Refreshed)
+        }
         Ok(()) => match source::run(&config.source) {
             Ok(items) => {
                 app.replace_source(items, elapsed_ms);
@@ -631,17 +660,7 @@ fn next_timeout(
 }
 
 fn spawn_refresh(source: vellum::config::SourceConfig) -> SourceWorker {
-    let (sender, receiver) = mpsc::channel();
-    let cancellation = source::Cancellation::default();
-    let worker_cancellation = cancellation.clone();
-    let handle = thread::spawn(move || {
-        let _ = sender.send(source::run_cancellable(&source, &worker_cancellation));
-    });
-    SourceWorker {
-        receiver,
-        cancellation,
-        handle: Some(handle),
-    }
+    SourceWorker::spawn(move |cancellation| source::run_cancellable(&source, cancellation))
 }
 
 fn receive_refresh(
@@ -1234,6 +1253,7 @@ mod tests {
     fn ui_014_initial_source_load_runs_on_a_background_worker() {
         let source = vellum::config::SourceConfig {
             cmd: Some("sleep 0.05; printf '%s' '[{\"id\":\"one\"}]'".into()),
+            remote: None,
             builtin: None,
             file: None,
             stdin: false,
@@ -1269,6 +1289,18 @@ mod tests {
     }
 
     #[test]
+    fn rem_005_select_one_does_not_accept_an_incomplete_remote_page() {
+        let mut config = Config::parse("[source]\ncmd = \"printf '%s' '{\\\"items\\\":[{\\\"value\\\":\\\"one\\\"}],\\\"next_cursor\\\":\\\"more\\\"}'\"\n[source.remote]\npage_size = 1\n[item]\ntemplate = [['$value']]\nvalue = '$value'").unwrap();
+        let (items, exhausted) = load_select_one_source(&config).unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(!exhausted);
+        config.source.cmd = Some("printf '%s' '{\"items\":[{\"value\":\"one\"}]}'".into());
+        let (items, exhausted) = load_select_one_source(&config).unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(exhausted);
+    }
+
+    #[test]
     #[cfg(unix)]
     fn src_021_cancellation_catches_descendants_forked_during_shutdown() {
         use nix::{errno::Errno, sys::signal::kill, unistd::Pid};
@@ -1280,6 +1312,7 @@ mod tests {
                 "i=0; while [ $i -lt 50 ]; do sleep 30 & echo $! >> '{}'; i=$((i + 1)); sleep 0.01; done; wait",
                 pid_file.display()
             )),
+            remote: None,
             builtin: None,
             file: None,
             stdin: false,
@@ -1320,6 +1353,7 @@ mod tests {
     fn src_021_cancellation_interrupts_continuous_source_output() {
         let source = vellum::config::SourceConfig {
             cmd: Some("yes".into()),
+            remote: None,
             builtin: None,
             file: None,
             stdin: false,

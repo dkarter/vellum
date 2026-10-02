@@ -388,7 +388,7 @@ fn filter_title(app: &App, config: &Config) -> Option<Line<'static>> {
     let highlight_end = end.round() as usize;
     let highlight = selected
         .and_then(|index| config.filters.choices[index].fg.as_deref())
-        .map(color)
+        .map(|value| themed_color(value, theme))
         .unwrap_or_else(|| color(&theme.selection_background));
     let foreground = color(&theme.foreground);
     let background = color(&theme.background);
@@ -446,14 +446,11 @@ fn filter_title(app: &App, config: &Config) -> Option<Line<'static>> {
             choice_end..choice_end + after,
         ]
     };
-    let clipped = clip_filter_spans(spans, &ranges);
+    let clipped = clip_spans(spans, &ranges);
     Some(Line::from(clipped))
 }
 
-fn clip_filter_spans(
-    spans: Vec<Span<'static>>,
-    ranges: &[std::ops::Range<usize>],
-) -> Vec<Span<'static>> {
+fn clip_spans(spans: Vec<Span<'_>>, ranges: &[std::ops::Range<usize>]) -> Vec<Span<'static>> {
     let mut clipped: Vec<Span<'static>> = Vec::new();
     let mut offset = 0;
     for span in spans {
@@ -883,8 +880,14 @@ fn render_row<'a>(
         .map(|segment| span(segment, theme, selected, background))
         .collect();
     if !right.is_empty() {
+        let budget = width.saturating_sub(right_width);
+        if left_width > budget {
+            let range = 0..budget;
+            spans = clip_spans(spans, std::slice::from_ref(&range));
+        }
+        let used: usize = spans.iter().map(Span::width).sum();
         spans.push(Span::raw(
-            " ".repeat(width.saturating_sub(left_width + right_width)),
+            " ".repeat(width.saturating_sub(used + right_width)),
         ));
         spans.extend(
             right
@@ -914,14 +917,15 @@ fn span<'a>(
                     &theme.foreground
                 })
             },
-            color,
+            |value| themed_color(value, theme),
         ))
-        .bg(color(
+        .bg(themed_color(
             segment
                 .bg
                 .as_deref()
                 .or(background)
                 .unwrap_or(&theme.background),
+            theme,
         ));
     if segment.bold {
         style = style.add_modifier(Modifier::BOLD);
@@ -939,6 +943,10 @@ fn color(value: &str) -> Color {
     Color::from_str(value).unwrap_or(Color::Reset)
 }
 
+fn themed_color(value: &str, theme: &Theme) -> Color {
+    color(crate::themes::resolve_color(theme, value))
+}
+
 #[cfg(test)]
 mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -946,6 +954,100 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn ui_021_theme_roles_follow_presets_legacy_saved_colors_and_overrides() {
+        let mut tokyo = crate::themes::theme("tokyo-night").unwrap();
+        assert_eq!(
+            themed_color("theme.colors.green", &tokyo),
+            Color::Rgb(0x9e, 0xce, 0x6a)
+        );
+        assert_eq!(
+            themed_color("theme.colors.magenta", &tokyo),
+            Color::Rgb(0xbb, 0x9a, 0xf7)
+        );
+        tokyo.colors.green = None;
+        tokyo.colors.magenta = None;
+        assert_eq!(
+            themed_color("theme.colors.magenta", &tokyo),
+            Color::Rgb(0xbb, 0x9a, 0xf7)
+        );
+        let mut mocha = crate::themes::theme("catppuccin-mocha").unwrap();
+        assert_eq!(
+            themed_color("theme.colors.magenta", &mocha),
+            Color::Rgb(0xcb, 0xa6, 0xf7)
+        );
+        mocha.colors.magenta = Some("#123456".into());
+        assert_eq!(
+            themed_color("theme.colors.magenta", &mocha),
+            Color::Rgb(0x12, 0x34, 0x56)
+        );
+        assert_eq!(themed_color("red", &mocha), Color::Red);
+        for name in [
+            "black",
+            "red",
+            "green",
+            "yellow",
+            "blue",
+            "magenta",
+            "cyan",
+            "white",
+            "bright_black",
+            "bright_red",
+            "bright_green",
+            "bright_yellow",
+            "bright_blue",
+            "bright_magenta",
+            "bright_cyan",
+            "bright_white",
+        ] {
+            assert_ne!(
+                themed_color(&format!("theme.colors.{name}"), &Theme::default()),
+                Color::Reset
+            );
+        }
+    }
+
+    #[test]
+    fn pal_020_pr_layout_aligns_status_and_author_with_theme_colors() {
+        let config = Config::parse(include_str!("../palettes/github-prs.toml")).unwrap();
+        let theme = crate::themes::theme("catppuccin-mocha").unwrap();
+        for (state, role) in [
+            ("OPEN", "theme.colors.green"),
+            ("MERGED", "theme.colors.magenta"),
+            ("CLOSED", "theme.colors.red"),
+            ("DRAFT", "theme.muted"),
+        ] {
+            let item = json!({"number":42,"title":"A very long pull request title that must leave room for its status", "author":"me", "status":state,"url":"url","approvals":"✓ 1 approvals","checks":"✓ 2"});
+            let rendered = crate::item::render_item(item.as_object().unwrap(), &config.item, 0);
+            let top = render_row(&rendered.rows[0], 30, &theme, false, None);
+            assert_eq!(top.width(), 30);
+            assert!(
+                top.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+                    .ends_with(state)
+            );
+            assert_eq!(
+                top.spans.last().unwrap().style.fg,
+                Some(themed_color(role, &theme))
+            );
+            let author = render_row(&rendered.rows[1], 30, &theme, false, None);
+            assert!(
+                author
+                    .spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+                    .starts_with("@me")
+            );
+            assert_eq!(
+                author.spans[1].style.fg,
+                Some(themed_color("theme.colors.cyan", &theme))
+            );
+        }
+    }
 
     #[test]
     fn ui_020_large_ansi_preview_starts_at_bottom_and_scrolls_normally() {

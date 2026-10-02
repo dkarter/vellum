@@ -79,6 +79,11 @@ fn run_inner(
     source: &SourceConfig,
     cancellation: Option<&Cancellation>,
 ) -> Result<Vec<SourceItem>> {
+    if let Some(remote) = &source.remote {
+        return Ok(
+            crate::remote::fetch(source, "", "", None, remote.page_size, cancellation)?.items,
+        );
+    }
     if let Some(builtin) = source.builtin {
         return builtin.run_cancellable(cancellation);
     }
@@ -778,6 +783,7 @@ mod tests {
     fn command_source(command: &str) -> SourceConfig {
         SourceConfig {
             cmd: Some(command.into()),
+            remote: None,
             builtin: None,
             file: None,
             stdin: false,
@@ -788,6 +794,7 @@ mod tests {
     fn file_source(path: &Path) -> SourceConfig {
         SourceConfig {
             cmd: None,
+            remote: None,
             builtin: None,
             file: Some(path.to_owned()),
             stdin: false,

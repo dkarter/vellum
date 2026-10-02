@@ -11,6 +11,28 @@ Install the bundled palettes with `vlm palettes sync`. Existing files remain unt
 | `herdr-agents` | `herdr` | Output agent pane ID |
 | `files` | `fd` and a Nerd Font | Output file path |
 | `themes` | None | Save selected theme to global config |
+| `github-prs` | Authenticated `gh`, a repository checkout | Open PR in browser |
+
+## GitHub pull requests
+
+Run `vlm github-prs` in a repository checkout. It starts with **mine open** selected and the filter controls open:
+
+- **m — mine open:** your open PRs.
+- **r — needs my review:** other authors' open PRs with a direct review request for you, your latest substantive review dismissed, or unresolved review threads you commented on. An approval alone does not include a PR.
+- **c — mine closed:** your merged or closed PRs.
+- **v — reviewed closed:** merged or closed PRs you reviewed or left review comments on.
+
+The list shows the PR state at the top right, with the author flush left on the second row alongside approvals and latest-commit check totals. State uses the selected theme's ANSI green, magenta, and red for open, merged, and closed; drafts use the muted border color. Authors use the theme's cyan. The preview includes reviewer decisions, individual checks and their URLs, unresolved thread counts, and the PR body. Enter opens the PR; Ctrl-A offers checkout and check-page actions. Escape leaves filter mode for search; Ctrl-G reopens the filters.
+
+Empty default categories are dimmed and Tab skips them. Their letter shortcuts still work, and startup stays on mine open even if it is empty. Category availability is checked in the background and cached for five minutes; it is independent of the search text. Unknown categories are dimmed until their probe completes.
+
+Typing fuzzy-filters loaded items immediately. After a 300 ms pause, Vellum also sends a literal title-text query to GitHub, augmenting local matches with matching PRs not loaded yet. GitHub text search is not fuzzy, so it can differ from local matching. New edits cancel obsolete requests. Search pages and caches are scoped to the category and server query; clearing the query immediately restores default pagination.
+
+Pages contain 30 candidates, newest updates first. Navigate down to the end to fetch another page. Checklist filtering can produce an empty page even when more candidates exist; navigate down again to continue. GitHub search limits each query to 1,000 results.
+
+The cache TTL is five minutes. Fresh cached pages render without an initial network fetch; expired pages render immediately while the footer says `refreshing source...`. Refresh also runs every five minutes while the palette stays open. Pagination preserves selection, removes duplicate values, and does not renew the cache TTL.
+
+Caches live under `$XDG_CACHE_HOME/vellum/sources` or `~/.cache/vellum/sources`, scoped to the checkout, source settings, filter, and active GitHub account. Persistent caching is disabled for environment-token authentication or when an offline account identity is unavailable. For GitHub Enterprise, set `GH_HOST` to the repository's hostname.
 
 ## Herdr workspaces
 

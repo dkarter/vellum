@@ -50,7 +50,7 @@
         },
         "builtin": {
           "description": "Maintained in-process source adapter. Mutually exclusive with cmd, file, and stdin.",
-          "enum": ["herdr-workspaces", "herdr-agents", "files", "themes"]
+          "enum": ["herdr-workspaces", "herdr-agents", "files", "themes", "github-prs"]
         },
         "file": {
           "description": "Path to a JSON, JSONC, YAML, or TOML item file. Relative paths resolve from the configuration file that declares them. Mutually exclusive with cmd, builtin, and stdin.",
@@ -62,7 +62,18 @@
           "description": "Read a one-shot JSON array or NDJSON stream from standard input. Mutually exclusive with cmd, builtin, and file; incompatible with refresh.",
           "const": true
         },
-        "refresh_ms": { "type": "integer", "minimum": 0, "default": 0 }
+        "refresh_ms": { "type": "integer", "minimum": 0, "default": 0 },
+        "remote": {
+          "description": "Opt-in cursor pages for command or github-prs sources. Commands receive VELLUM_FILTER, VELLUM_CURSOR, VELLUM_PAGE_SIZE and return {items, next_cursor}.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "page_size": { "type": "integer", "minimum": 1, "maximum": 100, "default": 30 },
+            "cache_ttl_ms": { "description": "Fresh cache skips fetching; expired cache renders while refreshing. Zero disables persistence.", "type": "integer", "minimum": 0, "default": 0 },
+            "probe_filters": { "description": "Probe unsearched categories in the background so empty choices are dimmed and skipped during nonempty cycling.", "type": "boolean", "default": false },
+            "search_debounce_ms": { "description": "Opt in to server search after this typing pause; commands receive VELLUM_QUERY. Local fuzzy matches remain immediate.", "type": "integer", "minimum": 0 }
+          }
+        }
       }
     },
     "input": {
@@ -104,6 +115,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "initial": { "description": "Value of the initially selected filter choice.", "type": "string" },
         "label": {
           "description": "Short name shown before compact filter keys.",
           "type": "string",
@@ -192,7 +204,18 @@
         "border": { "type": "string" },
         "mode_foreground": { "type": "string", "default": "black" },
         "insert_mode_background": { "type": "string", "default": "green" },
-        "normal_mode_background": { "type": "string", "default": "yellow" }
+        "normal_mode_background": { "type": "string", "default": "yellow" },
+        "colors": {
+          "description": "Standard 16-color ANSI palette. Item colors can reference theme.colors.green, etc. Unset colors are inferred for saved built-in themes or use the terminal palette.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "black": { "type": "string" }, "red": { "type": "string" }, "green": { "type": "string" }, "yellow": { "type": "string" },
+            "blue": { "type": "string" }, "magenta": { "type": "string" }, "cyan": { "type": "string" }, "white": { "type": "string" },
+            "bright_black": { "type": "string" }, "bright_red": { "type": "string" }, "bright_green": { "type": "string" }, "bright_yellow": { "type": "string" },
+            "bright_blue": { "type": "string" }, "bright_magenta": { "type": "string" }, "bright_cyan": { "type": "string" }, "bright_white": { "type": "string" }
+          }
+        }
       }
     }
   },

@@ -94,6 +94,25 @@ Vellum SHALL allow global defaults and individual palettes to configure the titl
 - WHEN Vellum parses the layered configuration
 - THEN the palette title wins and omitted titles use the documented default
 
+### Requirement: Configure remote sources
+
+Vellum SHALL make cursor-based source loading and cache TTL configurable without changing existing palettes.
+
+#### Scenario: Remote sources and initial filters are opt-in {#CFG-016}
+
+- GIVEN a palette using `source.remote` with a page size and cache TTL
+- WHEN its configuration is parsed
+- THEN command and GitHub PR sources support remote pages, while other source kinds reject the option
+- AND page sizes outside 1 through 100 are rejected
+- AND `filters.initial` selects a configured choice by value and unknown values are rejected
+- AND palettes without these options retain existing behavior
+
+#### Scenario: Configure remote search and semantic theme colors {#CFG-017}
+
+- GIVEN a palette or global configuration
+- WHEN optional remote filter probes, search debounce, or any of the 16 ANSI colors under `theme.colors` are configured
+- THEN these values are retained while existing configuration defaults remain unchanged
+
 ### Requirement: Configure palette filters
 
 Vellum SHALL allow global defaults and individual palettes to configure filter-mode and all-items bindings, an all-items label (default "all"), a separator (default "|"), a filter label, and ordered exact-match choices with optional presentation metadata.

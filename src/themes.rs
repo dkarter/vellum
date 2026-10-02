@@ -12,6 +12,9 @@ use toml_edit::{DocumentMut, Item, Table, value};
 
 use crate::config::Theme;
 
+mod colors;
+pub use colors::resolve_color;
+
 struct Preset {
     id: &'static str,
     label: &'static str,
@@ -317,6 +320,7 @@ pub fn items() -> Vec<Map<String, Value>> {
 pub fn theme(id: &str) -> Option<Theme> {
     let preset = PRESETS.iter().find(|preset| preset.id == id)?;
     Some(Theme {
+        colors: colors::preset_colors(preset.id),
         background: preset.background.into(),
         foreground: preset.foreground.into(),
         selection_foreground: preset.background.into(),
@@ -354,6 +358,18 @@ pub fn save(path: &Path, id: &str) -> Result<()> {
     ];
     for (key, color) in fields {
         doc["theme"][key] = value(color.as_str());
+    }
+    if !doc["theme"]
+        .as_table()
+        .and_then(|table| table.get("colors"))
+        .is_some_and(Item::is_table)
+    {
+        doc["theme"]["colors"] = Item::Table(Table::new());
+    }
+    for key in colors::NAMES {
+        if let Some(color) = theme.colors.get(key) {
+            doc["theme"]["colors"][key] = value(color);
+        }
     }
     let parent = path
         .parent()
@@ -395,6 +411,11 @@ mod tests {
             let id = item["id"].as_str().unwrap();
             assert!(ids.insert(id), "duplicate theme id: {id}");
             let theme = theme(id).unwrap();
+            for name in colors::NAMES {
+                let color = theme.colors.get(name).unwrap();
+                assert_eq!(color.len(), 7, "missing ANSI color {name} for {id}");
+                assert!(color[1..].bytes().all(|byte| byte.is_ascii_hexdigit()));
+            }
             for color in [
                 theme.background,
                 theme.foreground,

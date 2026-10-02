@@ -3,6 +3,26 @@
 ## Purpose
 Distribute maintained Herdr and file-finder palettes safely through the Vellum binary.
 ## Requirements
+
+### Requirement: Browse repository pull requests
+
+Vellum SHALL provide an official gh-backed repository PR palette with review-checklist filters, approval and check details, caching, and pagination.
+
+#### Scenario: GitHub pull request review checklist {#PAL-020}
+
+- GIVEN the official github-prs palette and an authenticated gh CLI in a repository
+- WHEN it starts
+- THEN it opens filter mode with mine open selected and a five-minute cache TTL
+- AND choices include mine open, needs my review, mine closed, and reviewed closed
+- AND mine filters use the current user's authorship, with closed including merged PRs
+- AND needs my review excludes authored PRs and includes direct review requests, the user's latest substantive review being dismissed, or unresolved review threads the user commented on
+- AND reviewed closed includes merged or closed PRs the user reviewed or left review comments on
+- AND items show approval and latest-commit status-check summaries with detailed previews
+- AND the author is left-aligned on the second row with a distinct theme accent
+- AND PR state is right-aligned on the first row, using theme green for open, purple for merged, red for closed, and muted styling for drafts
+- AND empty default categories are dimmed and skipped by Tab, while their shortcuts still work
+- AND local fuzzy matches appear immediately and debounced GitHub title-search matches augment them
+- AND results are ordered by most recently updated and paginated on demand
 ### Requirement: Browse and apply themes
 
 Vellum SHALL bundle a theme browser with modern theme variants. Browsing SHALL update the running interface live; accepting SHALL write the chosen theme to the global config while retaining unrelated settings and comments.

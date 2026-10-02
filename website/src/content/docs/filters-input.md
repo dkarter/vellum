@@ -56,6 +56,8 @@ To open a palette with the choice keys immediately available, set `start_mode = 
 
 Tab and Shift-Tab cycle through choices with results for the current search, including all when it has results. This updates as live source values change; if no choice has results, cycling leaves the selection alone. Direct choice keys still work for empty choices. Set `cycle_nonempty = false` under `[filters]` to cycle through every choice instead.
 
+Set `filters.initial` to a configured choice's **value**, such as `initial = "in_progress"`, to select it at startup. This is independent of whether the filter controls start open, and the choice stays selected even when empty. Unknown initial values are rejected. Remote palettes can use `source.remote.probe_filters = true` or source-provided availability to dim and skip empty default categories while keeping direct shortcuts available.
+
 ```toml
 [input]
 start_mode = "filter"

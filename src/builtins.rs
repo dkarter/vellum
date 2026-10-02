@@ -20,6 +20,7 @@ pub enum BuiltinSource {
     HerdrAgents,
     Files,
     Themes,
+    GithubPrs,
 }
 
 impl BuiltinSource {
@@ -36,6 +37,7 @@ impl BuiltinSource {
             Self::HerdrAgents => run_herdr_agents(cancellation),
             Self::Files => run_files(cancellation),
             Self::Themes => Ok(crate::themes::items()),
+            Self::GithubPrs => anyhow::bail!("github-prs requires the remote source controller"),
         }
     }
 }

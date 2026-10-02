@@ -16,12 +16,13 @@ Install a prebuilt release with mise:
 mise use --global github:dkarter/vellum
 ```
 
-Then install the bundled Herdr and file-finding palettes:
+Then install the bundled palettes:
 
 ```sh
 vlm palettes sync
 vlm files
 vlm themes # browse and apply a theme with live color previews
+vlm github-prs # repository PRs, review checklist, approvals, and checks (requires gh)
 ```
 
 Vellum writes accepted values to stdout and keeps its interface and diagnostics on stderr, so it composes cleanly with other terminal tools:

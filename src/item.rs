@@ -372,7 +372,7 @@ fn definition_text(
         .unwrap_or_else(|| context.text(&definition.source))
 }
 
-fn resolve(item: &Map<String, Value>, expression: &str) -> String {
+pub(crate) fn resolve(item: &Map<String, Value>, expression: &str) -> String {
     expression
         .strip_prefix('$')
         .map_or_else(|| expression.to_owned(), |name| field(item, name))

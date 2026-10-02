@@ -6,6 +6,17 @@ Render a compact responsive terminal interface that composes cleanly inside mult
 
 ## Requirements
 
+### Requirement: Resolve theme color roles in item segments
+
+Vellum SHALL resolve explicit `theme.colors.<name>` segment color references from the active theme's standard 16-color ANSI palette, alongside UI-role references such as `theme.foreground` and `theme.muted`, while preserving literal and source-field colors.
+
+#### Scenario: Item colors follow the selected theme {#UI-021}
+
+- GIVEN item segments using semantic theme color roles
+- WHEN the selected theme changes
+- THEN item foreground and background roles resolve to the new theme's colors without reloading source items
+- AND existing saved built-in themes infer semantic colors when the new fields are absent
+
 ### Requirement: Navigate and style previews
 
 Vellum SHALL render ANSI-colored preview output, scroll it with configurable bindings, optionally show a scrollbar, and allow full, separator, or borderless preview chrome. Results MAY have a titled surrounding box.

@@ -2,7 +2,6 @@ use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::Path,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result, bail};
@@ -13,6 +12,10 @@ pub struct Palette {
 }
 
 pub const PALETTES: &[Palette] = &[
+    Palette {
+        name: "github-prs",
+        contents: include_str!("../palettes/github-prs.toml"),
+    },
     Palette {
         name: "herdr-workspaces",
         contents: include_str!("../palettes/herdr-workspaces.toml"),
@@ -92,28 +95,7 @@ pub fn sync(config_root: &Path, overwrite: bool) -> Result<SyncReport> {
 }
 
 fn atomic_replace(path: &Path, contents: &str) -> Result<()> {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .context("system clock is before the Unix epoch")?
-        .as_nanos();
-    let temporary = path.with_extension(format!("tmp-{}-{nonce}", std::process::id()));
-    let result = (|| {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)
-            .with_context(|| format!("failed to create {}", temporary.display()))?;
-        file.write_all(contents.as_bytes())
-            .with_context(|| format!("failed to write {}", temporary.display()))?;
-        file.sync_all()
-            .with_context(|| format!("failed to sync {}", temporary.display()))?;
-        fs::rename(&temporary, path)
-            .with_context(|| format!("failed to replace {}", path.display()))
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result
+    crate::storage::atomic_write(path, contents.as_bytes(), None)
 }
 
 #[cfg(test)]
@@ -510,6 +492,11 @@ mod tests {
 
     fn representative_item(name: &str) -> Map<String, Value> {
         match name {
+            "github-prs" => serde_json::from_value(serde_json::json!({
+                "number": 42, "title": "Review checklist", "url": "https://github.com/owner/repo/pull/42",
+                "author": "me", "state": "OPEN", "status": "OPEN", "draft": "", "category": "mine-open",
+                "approvals": "✓ 1 approvals", "checks": "✓ 2  ✗ 0  ◷ 0", "details": "PR details"
+            })).unwrap(),
             "herdr-workspaces" => builtins::herdr_workspaces(SNAPSHOT).unwrap().remove(0),
             "herdr-agents" => builtins::herdr_agents(SNAPSHOT).unwrap().remove(0),
             "files" => builtins::file_item(Path::new("src/main.rs")).unwrap(),

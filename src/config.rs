@@ -143,6 +143,7 @@ pub enum OnSuccess {
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub struct FilterConfig {
+    pub initial: Option<String>,
     pub label: String,
     pub all_label: String,
     pub separator: String,
@@ -155,6 +156,7 @@ pub struct FilterConfig {
 impl Default for FilterConfig {
     fn default() -> Self {
         Self {
+            initial: None,
             label: "filter".into(),
             all_label: "all".into(),
             separator: "|".into(),
@@ -280,6 +282,8 @@ impl Default for SearchConfig {
 #[serde(deny_unknown_fields)]
 pub struct SourceConfig {
     #[serde(default)]
+    pub remote: Option<RemoteConfig>,
+    #[serde(default)]
     pub cmd: Option<String>,
     #[serde(default)]
     pub builtin: Option<BuiltinSource>,
@@ -289,6 +293,26 @@ pub struct SourceConfig {
     pub stdin: bool,
     #[serde(default)]
     pub refresh_ms: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct RemoteConfig {
+    pub page_size: usize,
+    pub cache_ttl_ms: u64,
+    pub probe_filters: bool,
+    pub search_debounce_ms: Option<u64>,
+}
+
+impl Default for RemoteConfig {
+    fn default() -> Self {
+        Self {
+            page_size: 30,
+            cache_ttl_ms: 0,
+            probe_filters: false,
+            search_debounce_ms: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -592,6 +616,7 @@ pub enum Alignment {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct Theme {
+    pub colors: ThemeColors,
     pub foreground: String,
     pub background: String,
     pub selection_foreground: String,
@@ -605,6 +630,7 @@ pub struct Theme {
 impl Default for Theme {
     fn default() -> Self {
         Self {
+            colors: ThemeColors::default(),
             foreground: "reset".into(),
             background: "reset".into(),
             selection_foreground: "black".into(),
@@ -614,6 +640,52 @@ impl Default for Theme {
             insert_mode_background: "green".into(),
             normal_mode_background: "yellow".into(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct ThemeColors {
+    pub black: Option<String>,
+    pub red: Option<String>,
+    pub green: Option<String>,
+    pub yellow: Option<String>,
+    pub blue: Option<String>,
+    pub magenta: Option<String>,
+    pub cyan: Option<String>,
+    pub white: Option<String>,
+    pub bright_black: Option<String>,
+    pub bright_red: Option<String>,
+    pub bright_green: Option<String>,
+    pub bright_yellow: Option<String>,
+    pub bright_blue: Option<String>,
+    pub bright_magenta: Option<String>,
+    pub bright_cyan: Option<String>,
+    pub bright_white: Option<String>,
+}
+
+impl ThemeColors {
+    pub fn get(&self, name: &str) -> Option<&str> {
+        match name {
+            "black" => &self.black,
+            "red" => &self.red,
+            "green" => &self.green,
+            "yellow" => &self.yellow,
+            "blue" => &self.blue,
+            "magenta" => &self.magenta,
+            "cyan" => &self.cyan,
+            "white" => &self.white,
+            "bright_black" => &self.bright_black,
+            "bright_red" => &self.bright_red,
+            "bright_green" => &self.bright_green,
+            "bright_yellow" => &self.bright_yellow,
+            "bright_blue" => &self.bright_blue,
+            "bright_magenta" => &self.bright_magenta,
+            "bright_cyan" => &self.bright_cyan,
+            "bright_white" => &self.bright_white,
+            _ => return None,
+        }
+        .as_deref()
     }
 }
 
@@ -667,6 +739,26 @@ impl Config {
     }
 
     fn validate(&self) -> Result<()> {
+        if let Some(remote) = &self.source.remote {
+            if !(1..=100).contains(&remote.page_size) {
+                bail!("source.remote.page_size must be between 1 and 100");
+            }
+            if self.source.cmd.is_none() && self.source.builtin != Some(BuiltinSource::GithubPrs) {
+                bail!("source.remote requires a command or github-prs source");
+            }
+        }
+        if self.source.builtin == Some(BuiltinSource::GithubPrs) && self.source.remote.is_none() {
+            bail!("github-prs requires source.remote");
+        }
+        if let Some(initial) = &self.filters.initial
+            && !self
+                .filters
+                .choices
+                .iter()
+                .any(|choice| &choice.value == initial)
+        {
+            bail!("filters.initial must name a configured choice value");
+        }
         if self
             .preview
             .command
@@ -1175,6 +1267,49 @@ mod tests {
         assert_eq!(config.keybindings.down.label(), "ctrl-j");
         assert_eq!(config.item.padding, 3);
         assert_eq!(config.item.spacing, 1);
+    }
+
+    #[test]
+    fn cfg_017_remote_search_probes_and_theme_roles_are_opt_in() {
+        let config = Config::parse(MINIMAL).unwrap();
+        assert!(config.theme.colors.green.is_none());
+        let config = Config::parse(&format!("{MINIMAL}\n[source.remote]\nprobe_filters = true\nsearch_debounce_ms = 300\n[theme.colors]\ncyan = '#123456'\ngreen = '#abcdef'\nred = '#fedcba'\nmagenta = '#654321'\nbright_white = '#ffffff'")).unwrap();
+        let remote = config.source.remote.unwrap();
+        assert!(remote.probe_filters);
+        assert_eq!(remote.search_debounce_ms, Some(300));
+        assert_eq!(config.theme.colors.magenta.as_deref(), Some("#654321"));
+        assert_eq!(config.theme.colors.bright_white.as_deref(), Some("#ffffff"));
+    }
+
+    #[test]
+    fn cfg_016_remote_sources_and_initial_filters_are_opt_in() {
+        let config = Config::parse(MINIMAL).unwrap();
+        assert!(config.source.remote.is_none());
+        assert!(config.filters.initial.is_none());
+        let palette = include_str!("../palettes/github-prs.toml");
+        let config = Config::parse(palette).unwrap();
+        assert_eq!(config.source.remote.unwrap().cache_ttl_ms, 300_000);
+        assert_eq!(config.filters.initial.as_deref(), Some("mine-open"));
+        assert!(Config::parse(&palette.replace("page_size = 30", "page_size = 0")).is_err());
+        assert!(Config::parse(&palette.replace("page_size = 30", "page_size = 101")).is_err());
+        assert!(
+            Config::parse(&palette.replace("initial = \"mine-open\"", "initial = \"unknown\""))
+                .is_err()
+        );
+        assert!(
+            Config::parse(&palette.replace("builtin = \"github-prs\"", "builtin = \"files\""))
+                .is_err()
+        );
+        let app = crate::app::App::new(
+            Vec::new(),
+            config.item,
+            config.keybindings,
+            config.filters,
+            config.input,
+            true,
+        );
+        assert!(app.filter_mode);
+        assert_eq!(app.active_filter().unwrap().value, "mine-open");
     }
 
     #[test]

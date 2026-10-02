@@ -70,6 +70,8 @@ pub struct App {
     pub status: Option<String>,
     status_is_error: bool,
     active_filter: Option<usize>,
+    load_more_requested: bool,
+    remote_filters: Option<HashMap<String, bool>>,
     filter_transition: Option<((f32, f32), Instant)>,
     filter_mode_transition: Option<(f32, Instant)>,
     list_page_size: usize,
@@ -146,6 +148,12 @@ impl App {
         );
         let filter_mode =
             input_config.start_mode == StartMode::Filter && !filter_config.choices.is_empty();
+        let active_filter = filter_config.initial.as_ref().and_then(|initial| {
+            filter_config
+                .choices
+                .iter()
+                .position(|choice| &choice.value == initial)
+        });
         let mut app = Self {
             item_config,
             keybindings,
@@ -176,7 +184,9 @@ impl App {
             action_cursor: 0,
             status: None,
             status_is_error: false,
-            active_filter: None,
+            active_filter,
+            load_more_requested: false,
+            remote_filters: None,
             filter_transition: None,
             filter_mode_transition: None,
             list_page_size: 1,
@@ -522,6 +532,34 @@ impl App {
         self.status_is_error = false;
     }
 
+    pub fn take_load_more_request(&mut self) -> bool {
+        std::mem::take(&mut self.load_more_requested)
+    }
+
+    pub fn set_remote_filter_availability(&mut self, availability: HashMap<String, bool>) -> bool {
+        if self.remote_filters.as_ref() == Some(&availability) {
+            return false;
+        }
+        self.remote_filters = Some(availability);
+        true
+    }
+
+    pub fn filter_values(&self) -> Vec<String> {
+        std::iter::once(String::new())
+            .chain(
+                self.filter_config
+                    .choices
+                    .iter()
+                    .map(|choice| choice.value.clone()),
+            )
+            .collect()
+    }
+
+    pub fn set_source_status(&mut self, status: Option<String>, error: bool) {
+        self.status = status;
+        self.status_is_error = error;
+    }
+
     pub fn clear_status(&mut self) -> bool {
         self.status_is_error = false;
         self.status.take().is_some()
@@ -669,6 +707,12 @@ impl App {
     }
 
     pub(crate) fn filter_has_items(&self, index: Option<usize>) -> bool {
+        if let Some(availability) = &self.remote_filters {
+            let value = index
+                .and_then(|index| self.filter_config.choices.get(index))
+                .map_or("", |choice| choice.value.as_str());
+            return availability.get(value).copied().unwrap_or(false);
+        }
         self.filter_availability
             .get(index.map_or(0, |index| index + 1))
             .copied()
@@ -802,6 +846,7 @@ impl App {
             .selected
             .saturating_add(self.list_page_size)
             .min(self.visible.len().saturating_sub(1));
+        self.request_more_at_end();
     }
 
     fn move_page_up(&mut self) {
@@ -811,6 +856,13 @@ impl App {
     fn move_down(&mut self) {
         if !self.visible.is_empty() {
             self.selected = (self.selected + 1).min(self.visible.len() - 1);
+        }
+        self.request_more_at_end();
+    }
+
+    fn request_more_at_end(&mut self) {
+        if self.selected >= self.visible.len().saturating_sub(1) {
+            self.load_more_requested = true;
         }
     }
 
