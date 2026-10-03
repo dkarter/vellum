@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/dkarter/vellum/compare/v1.6.0...v1.6.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* preserve actions popup size while filtering ([#73](https://github.com/dkarter/vellum/issues/73)) ([f7c72e3](https://github.com/dkarter/vellum/commit/f7c72e31abbdeb570da231634037bcc141b2a8a1))
+
 ## [1.6.0](https://github.com/dkarter/vellum/compare/v1.5.0...v1.6.0) (2026-10-03)
 
 
