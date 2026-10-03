@@ -10,7 +10,7 @@ hk = "2.4.0"
 node = "26"
 ripgrep = "latest"
 rust = { version = "1.99.0", mr_boxington = true }
-mr-boxington = "1.21.1"
+mr-boxington = "v1.22.0"
 
 [hooks]
 postinstall = "hk install --mise"
