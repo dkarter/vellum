@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0](https://github.com/dkarter/vellum/compare/v1.5.0...v1.6.0) (2026-10-03)
+
+
+### Features
+
+* add all-open PR filter and rendered Markdown previews ([363350e](https://github.com/dkarter/vellum/commit/363350e19b398ae182bbe34d7540f866f6c297fa))
+* add cached GitHub PR palette with review filters and themed statuses ([20119b2](https://github.com/dkarter/vellum/commit/20119b2ee069fabcbdedf997a9b36525088216c1))
+
 ## [1.5.0](https://github.com/dkarter/vellum/compare/v1.4.0...v1.5.0) (2026-09-25)
 
 
