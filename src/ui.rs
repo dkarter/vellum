@@ -706,7 +706,8 @@ fn render_theme_showcase(frame: &mut Frame, area: Rect, app: &App, theme: &Theme
 fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) -> Option<(u16, u16)> {
     let area = frame.area();
     let matching = app.matching_action_indices();
-    let content_width = matching
+    let available = app.available_action_indices();
+    let content_width = available
         .iter()
         .map(|index| &config.actions.items[*index])
         .map(|action| {
@@ -732,7 +733,7 @@ fn render_action_menu(frame: &mut Frame, app: &App, config: &Config) -> Option<(
         area.width
     };
     let width = content_width.saturating_add(4).max(36).min(max_width);
-    let action_height = matching.len().saturating_mul(2) as u16;
+    let action_height = available.len().saturating_mul(2) as u16;
     let max_height = if area.height >= 8 {
         area.height - 4
     } else {
@@ -1976,7 +1977,7 @@ mod tests {
                 name = "refresh"
                 label = "Refresh source"
                 icon = "R"
-                description = "Rerun the source"
+                description = "Rerun the source and reload all available palette items"
                 command = ["true"]
 
                 [[actions.items]]
@@ -2013,10 +2014,25 @@ mod tests {
             crossterm::event::KeyModifiers::CONTROL,
         ));
         let mut terminal = Terminal::new(TestBackend::new(70, 16)).unwrap();
+        let popup_corners = |terminal: &Terminal<TestBackend>| {
+            terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .enumerate()
+                .filter(|(_, cell)| matches!(cell.symbol(), "┌" | "┐" | "└" | "┘"))
+                .map(|(index, cell)| (index, cell.symbol().to_owned()))
+                .collect::<Vec<_>>()
+        };
 
         terminal
-            .draw(|frame| render(frame, &mut app, &config))
+            .draw(|frame| {
+                render_action_menu(frame, &app, &config);
+            })
             .unwrap();
+        let opening_corners = popup_corners(&terminal);
+        assert_eq!(opening_corners.len(), 4);
         let output: String = terminal
             .backend()
             .buffer()
@@ -2036,8 +2052,11 @@ mod tests {
             ));
         }
         terminal
-            .draw(|frame| render(frame, &mut app, &config))
+            .draw(|frame| {
+                render_action_menu(frame, &app, &config);
+            })
             .unwrap();
+        assert_eq!(popup_corners(&terminal), opening_corners);
         let output: String = terminal
             .backend()
             .buffer()
@@ -2048,6 +2067,24 @@ mod tests {
         assert!(output.contains("failure"), "{output}");
         assert!(output.contains("Show an error"), "{output}");
         assert!(!output.contains("Refresh source"), "{output}");
+
+        app.handle_key(crossterm::event::KeyEvent::from(
+            crossterm::event::KeyCode::Char('z'),
+        ));
+        terminal
+            .draw(|frame| {
+                render_action_menu(frame, &app, &config);
+            })
+            .unwrap();
+        assert_eq!(popup_corners(&terminal), opening_corners);
+        let output: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(output.contains("No matching actions"), "{output}");
 
         let mut tiny = Terminal::new(TestBackend::new(5, 3)).unwrap();
         tiny.draw(|frame| render(frame, &mut app, &config)).unwrap();
