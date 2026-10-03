@@ -55,6 +55,7 @@ Vellum SHALL show a compact in-process menu of actions for the selected item, in
 - AND arrow keys, Ctrl-N, and Ctrl-P continue to navigate the filtered actions
 - AND each configured icon is separated from its label by one space
 - AND action items use a one-cell horizontal gutter without an extra blank item row
+- AND filtering, including a query with no matches, preserves the popup's unfiltered width, height, and position within the terminal
 
 #### Scenario: Quick-action menu opens for a filtered selection {#ACT-012}
 
