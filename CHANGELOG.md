@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.2](https://github.com/dkarter/vellum/compare/v1.6.1...v1.6.2) (2026-10-04)
+
+
+### Bug Fixes
+
+* **deps:** align Astro declaration with audited version ([afdf3cd](https://github.com/dkarter/vellum/commit/afdf3cd156b0d2bc01797aefdc4d4f50caa7b7d4))
+
 ## [1.6.1](https://github.com/dkarter/vellum/compare/v1.6.0...v1.6.1) (2026-10-03)
 
 
