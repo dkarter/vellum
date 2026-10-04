@@ -9,14 +9,13 @@
   },
   "dependencies": {
     "@astrojs/starlight": "0.41.7",
-    "astro": "7.1.6"
+    "astro": "7.3.5"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
     "typescript": "6.0.3"
   },
   "overrides": {
-    "astro": "7.3.5",
     "devalue": "6.0.2",
     "fast-uri": "4.2.1",
     "undici": "8.11.2"
