@@ -49,3 +49,21 @@ jobs:
 
       - name: Build website
         run: mise run --skip-tools website-build
+
+  website-audit:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install website tools
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+        with:
+          install_args: node aube
+
+      - name: Install website dependencies
+        run: aube --dir website install --frozen-lockfile
+
+      - name: Audit website dependencies
+        # Keep CI actionable: fail on vulnerabilities with an available fix.
+        run: aube --dir website audit --ignore-unfixable
