@@ -8,6 +8,12 @@ local checks = new Mapping<String, Step> {
     check = new CommandSpec { command = "hk validate"; effect = "read" }
   }
 
+  ["jactionlint"] {
+    glob = List(".github/workflows/*.yml", ".github/workflows/*.yaml")
+    output_summary = "hide"
+    check = new CommandSpec { command = "jactionlint"; effect = "read" }
+  }
+
   ["rust-format"] {
     glob = List("src/**/*.rs", "tests/**/*.rs")
     output_summary = "hide"
@@ -49,6 +55,7 @@ hooks {
     steps {
       ["rust-format"] = checks["rust-format"]
       ["hk-config"] = checks["hk-config"]
+      ["jactionlint"] = checks["jactionlint"]
       ["gitleaks"] = (Builtins.gitleaks) {
         scan = "staged"
         check = new CommandSpec {
@@ -67,5 +74,5 @@ hooks {
     }
   }
 
-  ["pre-push"] { steps = checks }
+  ["pre-push"] { steps = checks.filter((name, step) -> name != "jactionlint") }
 }
