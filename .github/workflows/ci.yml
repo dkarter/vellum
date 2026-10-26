@@ -28,7 +28,7 @@ jobs:
           install_args: rust ripgrep mr-boxington
 
       - name: Configure Rust build cache
-        uses: jdx/mr-boxington-action@1687e54eb349cadf61fa38b5813a77875489e8e6 # v1.6.0
+        uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
 
       - name: Run tests
         run: mbx test --locked
