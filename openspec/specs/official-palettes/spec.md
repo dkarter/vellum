@@ -117,6 +117,13 @@ Vellum SHALL bundle an agent switcher showing each active agent's status.
 - WHEN the agent palette source is evaluated
 - THEN each item includes agent status and selects an agent identifier
 
+#### Scenario: Agent palette keeps agents without titles {#PAL-021}
+
+- GIVEN a Herdr snapshot with titled agents and agents whose titles are missing or null
+- WHEN the agent palette source is evaluated
+- THEN every agent remains selectable by its pane ID
+- AND missing and null titles become empty strings while existing titles are unchanged
+
 #### Scenario: Agent pane ID is output-only {#PAL-010}
 
 - GIVEN the bundled Herdr agent palette

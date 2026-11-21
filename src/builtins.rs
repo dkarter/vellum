@@ -259,15 +259,17 @@ pub fn herdr_agents(input: &str) -> Result<Vec<SourceItem>> {
             let agent = object(agent, "agent")?;
             let workspace_id = string(agent, "workspace_id")?;
             let mut item = Map::new();
-            for key in [
-                "pane_id",
-                "agent",
-                "terminal_title_stripped",
-                "cwd",
-                "workspace_id",
-            ] {
+            for key in ["pane_id", "agent", "cwd", "workspace_id"] {
                 copy_required(&mut item, agent, key)?;
             }
+            item.insert(
+                "terminal_title_stripped".into(),
+                agent
+                    .get("terminal_title_stripped")
+                    .filter(|title| !title.is_null())
+                    .cloned()
+                    .unwrap_or_else(|| "".into()),
+            );
             item.insert(
                 "workspace_label".into(),
                 labels
@@ -518,6 +520,42 @@ mod tests {
         assert_eq!(items[1]["status_icon"], "○");
         assert_eq!(items[0]["status_color"], "yellow");
         assert_eq!(items[1]["status_color"], "#a6e3a1");
+    }
+
+    #[test]
+    fn pal_021_herdr_agents_keep_titled_and_untitled_entries() {
+        let mut snapshot: Value = serde_json::from_str(SNAPSHOT).unwrap();
+        let agents = snapshot["result"]["snapshot"]["agents"]
+            .as_array_mut()
+            .unwrap();
+        let mut missing_title = agents[1].clone();
+        missing_title["pane_id"] = json!("w1:p3");
+        missing_title
+            .as_object_mut()
+            .unwrap()
+            .remove("terminal_title_stripped");
+        agents[1]["terminal_title_stripped"] = Value::Null;
+        agents.push(missing_title);
+
+        let items = herdr_agents(&snapshot.to_string()).unwrap();
+        let pane_ids_and_titles: Vec<_> = items
+            .iter()
+            .map(|item| {
+                (
+                    item["pane_id"].as_str(),
+                    item["terminal_title_stripped"].as_str(),
+                )
+            })
+            .collect();
+
+        assert_eq!(
+            pane_ids_and_titles,
+            [
+                (Some("w1:p1"), Some("Official palettes")),
+                (Some("w1:p2"), Some("")),
+                (Some("w1:p3"), Some("")),
+            ]
+        );
     }
 
     #[test]
