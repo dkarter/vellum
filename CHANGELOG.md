@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.2](https://github.com/dkarter/vellum/compare/v1.6.1...v1.6.2) (2026-11-21)
+
+
+### Bug Fixes
+
+* **deps:** align Astro declaration with audited version ([afdf3cd](https://github.com/dkarter/vellum/commit/afdf3cd156b0d2bc01797aefdc4d4f50caa7b7d4))
+* keep untitled Herdr agents in the picker ([#83](https://github.com/dkarter/vellum/issues/83)) ([64e1eef](https://github.com/dkarter/vellum/commit/64e1eef776ada1d30ae98dac5c25476ddc858db9))
+* **website:** update vulnerable dependencies ([#86](https://github.com/dkarter/vellum/issues/86)) ([8a1e54a](https://github.com/dkarter/vellum/commit/8a1e54a66db3770602673e5161c0d1720d500f82))
+
 ## [1.6.1](https://github.com/dkarter/vellum/compare/v1.6.0...v1.6.1) (2026-10-03)
 
 
